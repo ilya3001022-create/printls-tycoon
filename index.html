@@ -183,7 +183,7 @@ const CL=[ // крупные клиенты: 3 задачи → постоянн
   {n:'Космос',d:'кронштейны для спутника',t:[['Скорость печати 15 ур.',()=>S.up.speed||0,15],['Брак 2%',()=>S.up.cal||0,8],['Доход 5 000 ₽/с',()=>S.rate,5000]],r:[8e7,.1,150]}]];
 const ORD=['Сувениры для выставки','Брелоки для вендинга','Фигурки к Новому году','Партия для автосервиса','Подарки для корпоратива','Мерч для блогера'];
 const FAULT=['Спагетти','Засор хотенда','Отлип стол','Застряла нить в AMS'];
-const KEY='printls_tycoon',VER=10; // ключ больше не меняется; формат — по полю ver и миграциям
+const KEY='printls_tycoon',VER=11; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
 let S, acc={i:0,w:0,e:0,p:0}, accT=0, accN=0;
@@ -191,16 +191,16 @@ const role=()=>({n:0,pl:0,lv:0,a:0});
 const fresh=(rep=0,all=0,best=0)=>({money:3000,gems:0,run:0,all,best,rep,loc:0,racks:1,pr:[{t:0,p:0,st:'run',ft:0}],cnt:[1],prod:0,unl:[true],pl:1500,
   q:{otk:0,pack:0,ship:0},qc:{otk:0,pack:0,ship:0},team:{op:role(),pack:role(),ship:role(),otk:role()},mg:{},up:{},
   cl:{},cb:0,build:null,gt:0,daily:null,boostT:0,boostCD:0,offer:null,emT:0,lowpl:0,snd:1,eco:0,broke:0,
-  order:null,board:[],ag:{op:[],pack:[],ship:[]},imp:0,impB:0,out:0,ev:90,last:Date.now(),rate:0,exp:0,stat:{i:0,w:0,e:0,p:0},made:0,rej:0,intro:false,t0:Date.now()});
+  order:null,board:[],ag:{op:[],pack:[],ship:[]},qb:{otk:{},pack:{},ship:{}},rk:[],mp:{},ns:0,dq:null,bf:{},gcd:{},cv:0,cf:0,cbd:0,cbuy:0,imp:0,impB:0,out:0,ev:90,last:Date.now(),rate:0,exp:0,stat:{i:0,w:0,e:0,p:0},made:0,rej:0,intro:false,t0:Date.now()});
 
 // ---------- формулы ----------
 const P=()=>PR[S.prod];
 const Lc=()=>LOC[S.loc];
 const stages=()=>S.loc>=OTK_LV?['otk','pack','ship']:['pack','ship'];
 const roles=()=>S.loc>=OTK_LV?['op','otk','pack','ship']:['op','pack','ship'];
-const spd=()=>(1+.1*(S.up.speed||0))*(S.mg.ai?1.1:1)*(S.mg.srv?1.15:1);
+const spd=()=>(1+.1*(S.up.speed||0))*(S.mg.ai?1.1:1)*(S.mg.srv?1.15:1)*(S.bf&&S.bf.spd>0?1.25:1);
 const pm=()=>Lc().m*(1+IMP_B*S.imp)*(1+.1*S.rep)*(1+S.cb)*(1+.05*(S.up.ams||0))*(S.boostT>0?2:1);
-const defect=()=>Math.max(2,10-(S.up.cal||0))/100; // брак 10% у новичка (как у Ильи), калибровка до 2%
+const defect=()=>Math.max(1,10-(S.up.cal||0)-(S.bf&&S.bf.cal>0?3:0))/100; // брак 10% у новичка (как у Ильи), калибровка до 2%
 const hour=()=>(S.gt/(BAL.day/24)+8)%24;
 const night=()=>{const h=hour();return h>=22||h<6};
 const qcap=k=>BAL.qBase+BAL.qStep*S.qc[k];
@@ -213,7 +213,10 @@ const topI=()=>{let i=0;S.unl.forEach((u,j)=>{if(u)i=j});return i}; // само�
 const wageOf=k=>BAL.salary[k]*BAL.staff[S.loc]*Math.pow(BAL.wageLv,S.team[k].lv)/MON;
 const elecK=()=>BAL.kw*BAL.kwh/30; // ₽ за игровую секунду на единицу скорости: реальный час = 30 игровых секунд
 const rentS=()=>BAL.rent[S.loc]/MON;
-const wages=()=>roles().reduce((a,k)=>a+S.team[k].n*wageOf(k),0)+rentS(); // люди и аренда
+const staffW=()=>roles().reduce((a,k)=>a+S.team[k].n*wageOf(k),0);
+const working=()=>!night()||!!S.ns; // ночью без ночной смены люди дома
+const wages=()=>staffW()*(night()?(S.ns?2:0):1)+rentS(); // люди (ночная смена ×2) и аренда
+const wagesAvg=()=>staffW()*(16+(S.ns?16:0))/24+rentS(); // в среднем за сутки — для офлайна
 // ---------- раскладка цеха: одна на логику и 3D ----------
 let LAY=null,layK='';
 function lay(){const th=Lc().th,k=S.racks+':'+th;if(LAY&&layK===k)return LAY;layK=k;
@@ -246,7 +249,7 @@ const maxPr=()=>Math.min(S.racks*6,Lc().max);
 const pcost=t=>PT[t].c*Math.pow(BAL.pcF,S.cnt[t]||0);
 const rcost=()=>BAL.rack*Math.pow(BAL.rackF,S.racks); // стеллаж на 6 мест: каждый следующий чуть дороже (место, электрика)
 const upcost=u=>u.c*Math.pow(u.f,S.up[u.k]||0);
-const prodRate=()=>S.pr.reduce((a,x)=>a+PT[x.t].sp,0)*spd()/P().t; // шт/с
+const prodRate=()=>S.pr.reduce((a,x)=>a+PT[x.t].sp/PX(x).t,0)*spd(); // шт/с (у стеллажей могут быть разные изделия)
 const plPrice=()=>P().kg*BAL.bulk[S.loc];
 const clDone=l=>(S.cl[l]||[]).filter(c=>c&&c.done).length;
 const impN=()=>S.imp-S.impB; // шагов обустройства на этой площадке
@@ -263,25 +266,39 @@ const zab=k=>k==='pack'?'забита':'забит'; // «Упаковка» з�
 
 // ---------- механика ----------
 function earn(g,bonus){S.money+=g;S.run+=g;S.all+=g;if(!bonus)acc.i+=g} // бонусы не раздувают «₽/с»
-function spend(c,kind){S.money-=c;if(kind)acc[kind]+=c}
-function restart(x){x.p=0;x.ft=0;if(S.pl>=P().g){S.pl-=P().g;x.st='run'}else x.st='nopl'}
-// снять стол можно, только если на первом участке есть место (с допуском на дробные хвосты вроде 19,0000000004)
-function clear(x){const f=stages()[0];if(S.q[f]+1>qcap(f)+1e-6)return false;S.q[f]+=1;S.made++;restart(x);return true}
+function spend(c,kind){S.money-=c;if(kind)acc[kind]+=c;else if(c>0)S.cbuy=(S.cbuy||0)+1}
+// мешок деталей: {индекс изделия: штук}. Столы S.qb, тележки a.b, кузова f.b; S.q[k] — те же количества общим числом
+const bN=b=>{let n=0;for(const k in b)n+=b[k];return n};
+const bAdd=(b,pi,n)=>{if(n>0)b[pi]=(b[pi]||0)+n};
+const bMix=(b,o)=>{for(const k in o)bAdd(b,k,o[k])};
+function bTake(b,n){const o={};while(n>0){let mk=null;for(const k in b)if(b[k]>0&&(mk===null||b[k]>b[mk]))mk=k;if(mk===null)break;const t=Math.min(n,b[mk]);o[mk]=t;b[mk]-=t;if(!b[mk])delete b[mk];n-=t}return o} // берём с самой большой стопки
+const qb=k=>S.qb[k]||(S.qb[k]={});
+function qPut(k,b){const n=bN(b);bMix(qb(k),b);S.q[k]+=n;return n}
+function qTake(k,n){n=Math.floor(Math.min(n,S.q[k]));const o=bTake(qb(k),n);S.q[k]-=bN(o);return o}
+// что печатает принтер: задание его стеллажа или основное изделие
+const prodOf=i=>{const r=S.rk[i/6|0];return r!=null&&S.unl[r]?r:S.prod};
+const PX=x=>PR[x.pi!=null?x.pi:S.prod];
+function restart(x,i){if(x.st==='fail')S.cf=(S.cf||0)+1;if(i==null)i=S.pr.indexOf(x);x.pi=prodOf(i);const g=PR[x.pi].g;x.p=0;x.ft=0;if(S.pl>=g){S.pl-=g;x.st='run'}else x.st='nopl'}
+// снять стол можно, только если на первом участке есть место
+function clear(x,i){const f=stages()[0];if(S.q[f]+1>qcap(f)+1e-6)return false;qPut(f,{[x.pi!=null?x.pi:S.prod]:1});S.made++;S.mp[x.pi!=null?x.pi:S.prod]=(S.mp[x.pi!=null?x.pi:S.prod]||0)+1;restart(x,i);return true}
 // ручная работа (тап по столу): игрок переносит до n деталей на следующий стол; ОТК бракует поштучно
 function proc(k,n){
   const sg=stages(),i=sg.indexOf(k),nx=sg[i+1];if(i<0||!nx)return 0;
-  n=Math.floor(Math.min(n,S.q[k],qcap(nx)-S.q[nx]));if(n<=0)return 0;S.q[k]-=n;
-  if(k==='otk')for(let j=0;j<n;j++){if(Math.random()<defect())S.rej++;else S.q[nx]++}
-  else S.q[nx]+=n;
+  n=Math.floor(Math.min(n,S.q[k],qcap(nx)-S.q[nx]));if(n<=0)return 0;const b=qTake(k,n);
+  if(k==='otk'){for(const pi in b)for(let j=0;j<b[pi];j++){if(Math.random()<defect()){S.rej++;b[pi]--}}qPut(nx,b)}
+  else qPut(nx,b);
   return n}
+// средняя цена и граммы детали в текущем выпуске (стеллажи могут печатать разное)
+function mix(){let w=0,pv=0,gv=0;for(const x of S.pr){const q=PX(x),r=PT[x.t].sp/q.t;w+=r;pv+=r*q.p;gv+=r*q.g}return w?{p:pv/w,g:gv/w}:{p:P().p,g:P().g}}
 // фургон довёз груз клиенту (середина рейса): деньги и заказы; до ОТК часть деталей клиенты возвращают
-function deliver(n){if(n<=0)return;accN+=n;
-  {const ok=S.loc>=OTK_LV?n:Math.round(n*(1-defect()));if(S.loc<OTK_LV)S.rej+=n-ok;
-    let g=ok*P().p*pm();const full=Math.min(g,S.dm||0);S.dm=(S.dm||0)-full;const sl=Math.min(g-full,S.ds||0);S.ds=(S.ds||0)-sl;
-    g=full+sl*BAL.sale+(g-full-sl)*BAL.bulkSale; // сверх спроса — распродажа, дальше оптовику почти даром
-    if(full<ok*P().p*pm()-1e-9)S.over=(S.over||0)+1;earn(g);sound('coin');VIS.cash+=g;const o=S.order;
-    for(const b of S.board)if(b.p===S.prod&&b.got<b.need){b.got=Math.min(b.need,b.got+ok);if(b.got>=b.need)toast('📋 Заказ «'+b.n+'» готов — забери награду')}
-    if(o){o.got+=n;if(o.got>=o.need){earn(o.bonus,1);S.gems+=1;toast('🏆 Заказ «'+o.n+'» выполнен! Бонус +'+fm(o.bonus)+' и 💎 1');S.order=null}}}}
+function deliver(b){const n=bN(b);if(n<=0)return;accN+=n;
+  let raw=0,okAll=0;
+  for(const pi in b){const c=b[pi],ok=S.loc>=OTK_LV?c:Math.round(c*(1-defect()));if(S.loc<OTK_LV)S.rej+=c-ok;okAll+=ok;raw+=ok*PR[pi].p*pm();
+    for(const o of S.board)if(o.p==pi&&o.got<o.need){o.got=Math.min(o.need,o.got+ok);if(o.got>=o.need)toast('📋 Заказ «'+o.n+'» готов — забери награду')}}
+  const full=Math.min(raw,S.dm||0);S.dm=(S.dm||0)-full;const sl=Math.min(raw-full,S.ds||0);S.ds=(S.ds||0)-sl;
+  const g=full+sl*BAL.sale+(raw-full-sl)*BAL.bulkSale; // сверх спроса — распродажа, дальше оптовику почти даром
+  if(full<raw-1e-9)S.over=(S.over||0)+1;earn(g);sound('coin');VIS.cash+=g;const o=S.order;
+  if(o){o.got+=n;if(o.got>=o.need){earn(o.bonus,1);S.gems+=1;toast('🏆 Заказ «'+o.n+'» выполнен! Бонус +'+fm(o.bonus)+' и 💎 1');S.order=null}}}
 // ---------- люди-агенты: всё, что видно на экране, и есть расчёт ----------
 // прошлое положение людей и фургонов: картинка рисует между ним и текущим (главный цикл зовёт перед каждым тактом)
 function snap(){for(const a of S.ag.op.concat(S.ag.pack)){a.px=a.x;a.pz=a.z;a.pw=a.path.length>0&&!(a.w>0)}for(const f of S.ag.ship)f.pt=f.st==='road'?f.t:0}
@@ -291,10 +308,11 @@ function walkTo(a,dt,v){while(a.path.length){const [tx,tz]=a.path[0],d=Math.hypo
 let DONE=[];const AGV=8; // столько людей каждого участка ходит по цеху; остальные — за кадром, с той же выработкой
 const dist=(a,b)=>Math.abs(a[1]-b[1])<.05?Math.abs(a[0]-b[0]):Math.abs(a[0]-.22)+Math.abs(a[1]-b[1])+Math.abs(b[0]-.22);
 function syncAg(){const L=lay();
-  const fit=(arr,n,mk)=>{while(arr.length<n)arr.push(mk());while(arr.length>n){const a=arr.pop();if(a.c&&a.k==='op')S.q[stages()[0]]=Math.min(qcap(stages()[0]),S.q[stages()[0]]+a.c);if(a.c&&a.st==='road'){deliver(a.c);a.c=0}else if(a.c&&a.st==='dock')S.q.ship+=a.c}}; // уволили курьера: груз в пути довозим, у ворот — выгружаем на склад
-  fit(S.ag.op,Math.min(AGV,S.team.op.n),()=>({k:'op',x:L.drop[stages()[0]][0],z:L.drop[stages()[0]][1],path:[],tg:[],c:0,w:0,st:'idle'}));
-  fit(S.ag.pack,Math.min(AGV,S.team.pack.n),()=>({k:'pack',x:L.sPack[0],z:L.sPack[1],path:[],c:0,w:0,t:0,st:'pack'}));
-  fit(S.ag.ship,Math.max(1,Math.min(AGV,S.team.ship.n)),()=>({st:'dock',t:0,c:0,idle:0}))}
+  const fit=(arr,n,mk)=>{while(arr.length<n)arr.push(mk());while(arr.length>n){const a=arr.pop();if(!a.c)continue;const b=a.b||{};
+    if(a.k==='op')qPut(stages()[0],b);else if(a.k==='pack')qPut('pack',b);else if(a.st==='road')deliver(b);else qPut('ship',b)}}; // уволили: груз не пропадает — на стол, на склад или довозим
+  fit(S.ag.op,Math.min(AGV,S.team.op.n),()=>({k:'op',x:L.drop[stages()[0]][0],z:L.drop[stages()[0]][1],path:[],tg:[],c:0,b:{},w:0,st:'idle'}));
+  fit(S.ag.pack,Math.min(AGV,S.team.pack.n),()=>({k:'pack',x:L.sPack[0],z:L.sPack[1],path:[],c:0,b:{},w:0,t:0,st:'pack'}));
+  fit(S.ag.ship,Math.max(1,Math.min(AGV,S.team.ship.n)),()=>({st:'dock',t:0,c:0,b:{},idle:0}))}
 // оператор: выбирает ближайшие готовые принтеры (сколько влезет в тележку), собирает, несёт на первый стол.
 // Каждый шаг тратит своё время, остаток такта переходит в следующий шаг — поэтому такт 0,1 и 1 с дают одно и то же.
 function stepOp(a,dt){const f=stages()[0],tb=lay().drop[f],v=vOf('op');
@@ -309,9 +327,9 @@ function stepOp(a,dt){const f=stages()[0],tb=lay().drop[f],v=vOf('op');
         if(bi<0)break;pick.push(bi);cur=front(bi)}
       if(!pick.length)return;a.tg=pick;a.path=route([a.x,a.z],front(pick[0]));a.st='go'}
     if(a.path.length){const r=walkTo(a,dt,v);if(r<0)return;dt=r}
-    if(a.st==='go'){const i=a.tg.shift(),x=S.pr[i];if(x&&x.st==='done'){a.c++;S.made++;restart(x);a.w=BAL.load}
+    if(a.st==='go'){const i=a.tg.shift(),x=S.pr[i];if(x&&x.st==='done'){const pi=x.pi!=null?x.pi:S.prod;a.b=a.b||{};bAdd(a.b,pi,1);a.c++;S.made++;S.mp[pi]=(S.mp[pi]||0)+1;restart(x,i);a.w=BAL.load}
       if(a.tg.length)a.path=route([a.x,a.z],front(a.tg[0]));else if(a.c){a.path=route([a.x,a.z],tb);a.st='back'}else a.st='idle';continue}
-    if(a.st==='back'||a.st==='wait'){const n=Math.min(a.c,Math.floor(qcap(f)-S.q[f]+1e-6));if(n>0){S.q[f]+=n;a.c-=n;a.w=BAL.load*n}
+    if(a.st==='back'||a.st==='wait'){const n=Math.min(a.c,Math.floor(qcap(f)-S.q[f]+1e-6));if(n>0){qPut(f,bTake(a.b,n));a.c-=n;a.w=BAL.load*n}
       if(a.c){a.st='wait';return} // стол забит — стоит с грузом и ждёт: узкое место видно глазами
       a.st='idle'}}}
 // упаковщик: пакует у стола до полной тележки, несёт коробки к фургону
@@ -319,23 +337,23 @@ function stepPack(a,dt){const L=lay(),v=vOf('pack'),c=capOf('pack');
   for(let g=0;g<40&&dt>1e-9;g++){
     if(a.w>0){const u=Math.min(a.w,dt);a.w-=u;dt-=u;continue}
     if(a.st==='pack'){
-      if(a.c<c&&S.q.pack>=1){const need=BAL.packT-a.t;if(dt>=need){dt-=need;a.t=0;S.q.pack-=1;a.c++;continue}a.t+=dt;return}
+      if(a.c<c&&S.q.pack>=1){const need=BAL.packT-a.t;if(dt>=need){dt-=need;a.t=0;a.b=a.b||{};bMix(a.b,qTake('pack',1));a.c++;continue}a.t+=dt;return}
       if(a.c&&a.c<c&&(a.iw||0)<2){const u=Math.min(dt,2-(a.iw||0));a.iw=(a.iw||0)+u;dt-=u;continue} // ждёт до 2 с, вдруг поднесут ещё
       if(a.c){a.iw=0;a.path=[L.sDock];a.st='go';continue}return}
     if(a.path.length){const r=walkTo(a,dt,v);if(r<0)return;dt=r}
-    if(a.st==='go'||a.st==='wait'){const n=Math.min(a.c,Math.floor(qcap('ship')-S.q.ship+1e-6));if(n>0){S.q.ship+=n;a.c-=n;a.w=BAL.load*n}
+    if(a.st==='go'||a.st==='wait'){const n=Math.min(a.c,Math.floor(qcap('ship')-S.q.ship+1e-6));if(n>0){qPut('ship',bTake(a.b,n));a.c-=n;a.w=BAL.load*n}
       if(a.c){a.st='wait';return}a.path=[L.sPack];a.st='ret';continue}
     if(a.st==='ret')a.st='pack'}}
 // фургон: грузит со склада у ворот, уезжает полным (или если ждать больше нечего); груз едет в кузове (f.c),
 // деньги — когда довёз клиенту (середина рейса), назад возвращается пустым
-function depart(f){f.c=Math.min(f.c,capOf('ship'));f.st='road';f.t=f.T=road();f.idle=0}
-function stepVan(f,i,dt){const c=capOf('ship'),k=S.broke?.5:1;
+function depart(f){f.st='road';f.t=f.T=road();f.idle=0;S.cv=(S.cv||0)+1}
+function stepVan(f,i,dt,dtRoad){const c=capOf('ship'),k=S.broke?.5:1;if(dtRoad!=null&&f.st==='road')dt=dtRoad;
   for(let g=0;g<40&&dt>1e-9;g++){
-    if(f.st==='road'){if(f.c>0){const u=Math.min(Math.max(0,f.t-f.T/2),dt);f.t-=u;dt-=u;if(f.t<=f.T/2+1e-9){deliver(f.c);f.c=0}continue} // туда: везёт груз
+    if(f.st==='road'){if(f.c>0){const u=Math.min(Math.max(0,f.t-f.T/2),dt);f.t-=u;dt-=u;if(f.t<=f.T/2+1e-9){deliver(f.b||{});f.b={};f.c=0}continue} // туда: везёт груз
       const u=Math.min(f.t,dt);f.t-=u;dt-=u;if(f.t<=1e-9){f.st='dock';f.t=0}continue} // обратно: пустой
-    if(i>=S.team.ship.n)return; // без курьера фургон стоит, пока игрок не тапнет
+    if(i>=S.team.ship.n||!working())return; // без курьера (или ночью без смены) фургон стоит, пока игрок не тапнет
     if(f.c>=c){depart(f);continue}
-    if(S.q.ship>=1){const need=(BAL.load-f.t)/k;f.idle=0;if(dt>=need){dt-=need;f.t=0;S.q.ship-=1;f.c++;continue}f.t+=dt*k;return}
+    if(S.q.ship>=1){const need=(BAL.load-f.t)/k;f.idle=0;if(dt>=need){dt-=need;f.t=0;f.b=f.b||{};bMix(f.b,qTake('ship',1));f.c++;continue}f.t+=dt*k;return}
     if(f.c>0){const need=3-f.idle;if(dt>=need){dt-=need;depart(f);continue}}
     f.idle+=dt;return}}
 // люди за кадром: та же выработка на человека, что у видимых, без хождения по сцене
@@ -343,14 +361,14 @@ function offScreen(dt){const f=stages()[0];
   for(const k of ['op','pack','ship']){const r=S.team[k],e=r.n-AGV;if(e<=0){r.a=0;continue}
     r.a=Math.min(r.a+sr(k)/r.n*e*dt,capOf(k)*e);
     if(k==='op'&&r.a>=1){const busy=new Set();for(const b of S.ag.op)for(const i of b.tg)busy.add(i);
-      for(let i=0;i<S.pr.length&&r.a>=1;i++){const x=S.pr[i];if(x.st==='done'&&!busy.has(i)){if(!clear(x))break;r.a-=1}}}
-    if(k==='pack'){const n=Math.floor(Math.min(r.a,S.q.pack,qcap('ship')-S.q.ship));if(n>0){S.q.pack-=n;S.q.ship+=n;r.a-=n}}
-    if(k==='ship'){const n=Math.floor(Math.min(r.a,S.q.ship));if(n>0){S.q.ship-=n;r.a-=n;deliver(n)}}}}
-function tapVan(){const f=S.ag.ship.find(v=>v.st==='dock');if(!f)return 0;const n=Math.min(capOf('ship')-f.c,Math.floor(S.q.ship));S.q.ship-=n;f.c+=n;if(!f.c)return 0;depart(f);return 1}
+      for(let i=0;i<S.pr.length&&r.a>=1;i++){const x=S.pr[i];if(x.st==='done'&&!busy.has(i)){if(!clear(x,i))break;r.a-=1}}}
+    if(k==='pack'){const n=Math.floor(Math.min(r.a,S.q.pack,qcap('ship')-S.q.ship));if(n>0){qPut('ship',qTake('pack',n));r.a-=n}}
+    if(k==='ship'){const n=Math.floor(Math.min(r.a,S.q.ship));if(n>0){r.a-=n;S.cv=(S.cv||0)+n/capOf('ship');deliver(qTake('ship',n))}}}}
+function tapVan(){const f=S.ag.ship.find(v=>v.st==='dock');if(!f)return 0;const n=Math.min(capOf('ship')-f.c,Math.floor(S.q.ship));f.b=f.b||{};bMix(f.b,qTake('ship',n));f.c+=n;if(!f.c)return 0;depart(f);return 1}
 // доска заказов: всегда 3 заказа на разные изделия; детали идут в заказ, если печатаем это изделие
 function newOrd(){const ok=PR.map((x,i)=>i).filter(i=>S.unl[i]),nx=PR.findIndex((x,i)=>!S.unl[i]&&x.lv<=S.loc);
   let i=ok[Math.max(0,ok.length-1-(Math.random()*3|0))];if(nx>=0&&Math.random()<.3)i=nx; // иногда просят ещё не открытое
-  const pc=Math.max(.05,S.rate/Math.max(1,P().p*pm())),need=Math.max(10,Math.round(pc*(120+Math.random()*180)*P().p/PR[i].p));
+  const mp=mix().p,pc=Math.max(.05,S.rate/Math.max(1,mp*pm())),need=Math.max(10,Math.round(pc*(120+Math.random()*180)*mp/PR[i].p));
   return {p:i,n:ORD[Math.random()*ORD.length|0],need,got:0,bonus:need*PR[i].p*pm()*1.2,gem:Math.random()<.3?1:0,left:900}}
 function fillBoard(){while(S.board.length<3){let o,k=0;do o=newOrd();while(k++<6&&S.board.some(b=>b.p===o.p));S.board.push(o)}} // по возможности разные изделия
 function supply(){const p=P(),need=p.g*S.pr.length*2;if(S.pl>=need)return;
@@ -359,24 +377,28 @@ function tick(dt){
   {const D=demand();S.dm=Math.min((S.dm||0)+D*dt,D*120);S.ds=Math.min((S.ds||0)+D*dt,D*120)}
   for(let i=S.board.length-1;i>=0;i--){const b=S.board[i];if(b.got<b.need&&(b.left-=dt)<=0)S.board.splice(i,1)} // клиент не дождался — уходит к другим
   if(S.board.length<3)fillBoard();
+  if(!S.dq||(S.gt%5)<dt)dqCheck();
+  for(const k in S.bf)if(S.bf[k]>0)S.bf[k]-=dt;for(const k in S.gcd)if(S.gcd[k]>0)S.gcd[k]-=dt; // бонусы и откаты мини-игр
   const p=P(),sp=spd();if(S.out>0)S.out-=dt;S.gt+=dt;
   const on=!(S.out>0)||S.up.ups;let el=0;
-  for(const x of S.pr){
-    if(x.st==='nopl'&&S.pl>=p.g){S.pl-=p.g;x.st='run';x.p=0}
-    if(x.st==='run'&&on){x.p+=dt*PT[x.t].sp*sp/p.t;el+=PT[x.t].sp;if(x.p>=1){x.p=1;x.st='done'}}
-    if(x.st==='fail'&&(S.mg.ai||S.mg.tech)){x.ft+=dt;if(x.ft>(S.mg.ai?2:8))restart(x)}
-  }
+  S.pr.forEach((x,i)=>{const q=PX(x);
+    if(x.st==='nopl'&&S.pl>=q.g){S.pl-=q.g;x.st='run';x.p=0}
+    if(x.st==='run'&&on){x.p+=dt*PT[x.t].sp*sp/q.t;el+=PT[x.t].sp;if(x.p>=1){x.p=1;x.st='done'}}
+    if(x.st==='fail'&&(S.mg.ai||S.mg.tech)){x.ft+=dt;if(x.ft>(S.mg.ai?2:8))restart(x,i)}
+  });
   DONE=[];S.pr.forEach((x,i)=>{if(x.st==='done')DONE.push(i)}); // готовые — один проход на такт
-  syncAg();for(const a of S.ag.op)stepOp(a,dt);for(const a of S.ag.pack)stepPack(a,dt);S.ag.ship.forEach((f,i)=>stepVan(f,i,dt));
-  offScreen(dt);
-  if(S.loc>=OTK_LV&&S.team.otk.n){const r=S.team.otk;r.a=Math.min(r.a+sr('otk')*dt,5+sr('otk')*dt);while(r.a>=1&&proc('otk',1))r.a-=1} // контролёры стоят у стола
+  syncAg();const wk=working();
+  if(wk){for(const a of S.ag.op)stepOp(a,dt);for(const a of S.ag.pack)stepPack(a,dt)}
+  S.ag.ship.forEach((f,i)=>stepVan(f,i,wk?dt:0,dt)); // в рейсе фургон доезжает и ночью, грузит — только смена
+  if(wk)offScreen(dt);
+  if(wk&&S.loc>=OTK_LV&&S.team.otk.n){const r=S.team.otk;r.a=Math.min(r.a+sr('otk')*dt,5+sr('otk')*dt);while(r.a>=1&&proc('otk',1))r.a-=1} // контролёры стоят у стола
   if(S.mg.sup)supply();
   // расходы: зарплаты и электричество; нечем платить — люди работают вполсилы
   const w=wages()*dt,e=el*elecK()*dt;spend(w,'w');spend(e,'e');
   if(S.money<0){S.money=0;if(!S.broke){S.broke=1;toast(wages()?'💸 Нечем платить зарплату — люди работают вполсилы. Уволь лишних или подними доход':'💡 Нечем платить за свет — отвези готовое, чтобы заработать');sound('bad')}}else if(S.money>w*50)S.broke=0;
   // аварийная катушка: без пластика и без денег игра не должна умирать
   if(S.emT>0)S.emT-=dt;
-  if(S.pl<p.g&&S.money<plPrice()&&(S.q.otk+S.q.pack+S.q.ship)*p.p*pm()+S.money<plPrice()&&!S.pr.some(x=>x.st==='run'||x.st==='done')&&S.emT<=0){S.pl+=500;S.emT=60;toast('🧵 Аварийная катушка 0,5 кг — бесплатно. Оставляй деньги на пластик!')}
+  if(S.pl<p.g&&S.money<plPrice()&&(S.q.otk+S.q.pack+S.q.ship)*mix().p*pm()+S.money<plPrice()&&!S.pr.some(x=>x.st==='run'||x.st==='done')&&S.emT<=0){S.pl+=500;S.emT=60;toast('🧵 Аварийная катушка 0,5 кг — бесплатно. Оставляй деньги на пластик!')}
   if(!S.mg.sup&&S.pl<p.g*S.pr.length*4){if(!S.lowpl){S.lowpl=1;toast('🧵 Пластик кончается — купи катушку под цехом');sound('bad')}}else S.lowpl=0;
   if(S.offer){S.offer.left-=dt;if(S.offer.left<=0)S.offer=null}
   if(S.boostT>0)S.boostT-=dt;if(S.boostCD>0)S.boostCD-=dt;
@@ -408,21 +430,29 @@ function event(){
 }
 // поток без игрока: самое узкое звено цепочки; участок без людей стоит
 // офлайн — по реально замеренному потоку отгрузок (S.fm, шт/с), но не выше теории: что видел, то и получишь
-const flowOff=()=>Math.min(S.fm||0,prodRate(),...['op',...stages()].map(k=>sr(k)*1.5)); // теория с запасом: люди берут ближние принтеры, а она считает средний рейс
+const flowOff=()=>Math.min(S.fm||0,prodRate(),...['op',...stages()].map(k=>sr(k)*1.5))*(S.ns?1:2/3); // без ночной смены треть суток люди дома // теория с запасом: люди берут ближние принтеры, а она считает средний рейс
 function offline(){
   const max=S.mg.srv?8*3600:6*3600,raw=(Date.now()-S.last)/1000,el=Math.min(max,raw);
   if(raw<60){for(let t=raw;t>0;t-=.1)tick(Math.min(.1,t));return} // короткую паузу досчитываем честно, по тикам
   S.gt+=raw;
-  const p=P(),per=p.p*pm()*(1-defect()),flow=flowOff(),sum=S.pr.reduce((a,x)=>a+PT[x.t].sp,0),pr=prodRate();
+  const p=mix(),per=p.p*pm()*(1-defect()),flow=flowOff(),sum=S.pr.reduce((a,x)=>a+PT[x.t].sp,0),pr=prodRate();
   let pcs=flow*el*(S.mg.srv?1:.5);if(!S.mg.sup){pcs=Math.min(pcs,S.pl/p.g);S.pl=Math.max(0,S.pl-pcs*p.g)}
   const Dk=demand()*el*(S.mg.srv?1:.5),rv=pcs*per,sold=Math.min(rv,Dk)+Math.min(Math.max(0,rv-Dk),Dk)*BAL.sale+Math.max(0,rv-2*Dk)*BAL.bulkSale; // спрос и в офлайне
-  let g=Math.max(0,sold-(wages()+sum*(pr?flow/pr:0)*elecK())*el*(S.mg.srv?1:.5));
+  let g=Math.max(0,sold-(wagesAvg()+sum*(pr?flow/pr:0)*elecK())*el*(S.mg.srv?1:.5));
   if(!flow&&S.made&&typeof modal==='function')modal('😴 Тебя не было '+dur(raw),'Ферма стояла: без людей готовые детали никто не снимает, не пакует и не возит.<br><br>Найми оператора, упаковщика и курьера во вкладке «Люди» — они работают и без тебя.');
   if(g>0){S.made+=Math.floor(pcs);
     earn(g,1);modal('😴 Тебя не было '+dur(raw),'Ферма заработала <b>'+fm(g)+'</b> (за вычетом зарплат и света)'+(raw>max?'<br><span class="sub">Склад полон: копится не больше '+dur(max)+'</span>':'')+
     (S.mg.srv?'':'<br><span class="sub">Без сервера офлайн 50% и до 6 ч</span>'))}
   if(S.build&&Date.now()>=S.build.end)moved();
 }
+// задания дня: три задачи на сегодня по местной дате, цель — под текущий темп
+const DQ={make:['Сделай деталей',()=>S.made],vans:['Отправь фургонов',()=>Math.floor(S.cv||0)],fix:['Почини принтеров',()=>S.cf||0],
+  board:['Сдай заказов с доски',()=>S.cbd||0],earn:['Заработай ₽',()=>S.run],buy:['Сделай покупок',()=>S.cbuy||0]};
+const today=()=>{const d0=new Date();return d0.getFullYear()+'-'+String(d0.getMonth()+1).padStart(2,'0')+'-'+String(d0.getDate()).padStart(2,'0')};
+function dqCheck(){const d=today();if(S.dq&&S.dq.day===d)return;const ks=Object.keys(DQ);const pick=[];while(pick.length<3){const k=ks[Math.random()*ks.length|0];if(!pick.includes(k))pick.push(k)}
+  const pcs=Math.max(.05,S.fm||0);const goal={make:Math.max(30,Math.round(pcs*600/10)*10),vans:Math.max(5,Math.round(pcs*600/capOf('ship'))),fix:3,board:2,earn:Math.max(1000,Math.round(Math.max(S.rate,10)*600/100)*100),buy:5};
+  S.dq={day:d,all:0,q:pick.map(k=>({k,need:goal[k],base:DQ[k][1](),cl:0}))}}
+const dqGot=x=>Math.min(x.need,DQ[x.k][1]()-x.base);
 function daily(){
   const d0=new Date(),day=d0.getFullYear()+'-'+String(d0.getMonth()+1).padStart(2,'0')+'-'+String(d0.getDate()).padStart(2,'0');if(S.daily&&S.daily.day===day)return;
   if(!S.made)return; // первая награда — когда уже что-то сделал
@@ -437,6 +467,8 @@ const skipCost=()=>S.build?Math.max(1,Math.ceil((S.build.end-Date.now())/60000/B
 // старые сохранения: v6 и v7 совместимы по изделиям; более ранние — другая экономика, их не тянем
 const OLDC=[40000,800000,12e6,1.8e9,110e9,110e9],NEWC=[20000,250000,2.5e6,20e6,200e6,200e6]; // цены следующего переезда до/после перехода на рубли
 const MIG={6:s=>{s.ag={op:[],pack:[],ship:[]};return s},7:s=>s,
+  10:s=>{const pi=s.prod||0;s.qb={};for(const k of ['otk','pack','ship'])s.qb[k]=s.q&&s.q[k]?{[pi]:s.q[k]}:{};
+    if(s.ag)for(const k of ['op','pack','ship'])for(const a of s.ag[k]||[])a.b=a.c?{[pi]:a.c}:{};s.rk=[];s.mp={};return s},
   9:s=>{s.eco=0;return s}, // эконом включался сам из-за утечки «+₽» — один раз возвращаем полную графику
   8:s=>{const l=Math.min(5,s.loc||0),f=NEWC[l]/OLDC[l];s.money=Math.max(500,(s.money||0)*f);s.best=(s.best||0)*f;s.run=(s.run||0)*f;s.all=(s.all||0)*f;s.rate=0;s.exp=0;s.fm=0;s.fw=[];s.board=[];s.offer=null;s.order=null;return s}};
 function merge(b,j){for(const k in j){const v=j[k];if(v&&typeof v==='object'&&!Array.isArray(v)&&b[k]&&typeof b[k]==='object'&&!Array.isArray(b[k]))merge(b[k],v);else b[k]=v}return b}
@@ -479,6 +511,7 @@ function hintText(){const f=[...stages()].reverse().find(k=>S.q[k]>=qcap(k)-.01)
     if(!r.pl&&S.money>=plcost('pack'))return'👉 Купи рабочее место упаковщику во вкладке «Люди»';
     if(r.pl&&S.money>=hcost('pack'))return'👉 Найми упаковщика во вкладке «Люди» — он пакует сам'}
   if(S.made<400&&S.pr.length<maxPr()&&S.money>=pcost(0))return'👉 Купи ещё принтер во вкладке «Магазин»';
+  if(night()&&!S.ns&&staffW()>0)return'🌙 Ночь — люди дома до 6:00. Ночная смена — во вкладке «Люди»';
   if((S.dm||0)<demand()*5&&S.made>50)return'📉 Рынок насыщен — излишки уходят за 25%. Вложись в «Маркетинг» во вкладке «Рост»';
   if(S.made<5)return'👉 Тапай принтер — печать идёт быстрее';
   return goal()}
@@ -515,6 +548,12 @@ const U={ // живые подписи, обновляются 10 раз в се
   sr:k=>S.team[k].n?fn(sr(k)*60)+' шт/мин':'вручную',
   rate:()=>fn(prodRate()*60)+' шт/мин',
   rej:()=>fn(S.rej),
+  dq:()=>{if(!S.dq)return'';const r=S.dq.q.map((x,i)=>{const got=dqGot(x),ok=got>=x.need;return '<div class="task"><div class="grow">'+(x.cl?'✅ ':ok?'🎯 ':'▫️ ')+DQ[x.k][0]+' '+fn(x.need)+
+    '<div class="sub">'+(x.cl?'получено':'<span data-u="dqp:'+i+'"></span>')+'</div></div>'+(x.cl?'':'<button class="btn'+(ok?'':' sec')+'" data-a="dqc" data-i="'+i+'"'+(ok?'':' disabled')+'>Забрать</button>')+'</div>'}).join('');
+    return r+'<div class="sub" style="margin-top:6px">'+(S.dq.all?'🏆 Все три выполнены — 💎 10 получены':'Все три за день — ещё 💎 10. Новые задания — завтра')+'</div>'},
+  dqp:i=>{const x=S.dq&&S.dq.q[+i];return x?fn(dqGot(x))+' / '+fn(x.need):''},
+  gm:k=>{const n={cal:'🎯 Калибровка стола',knot:'🧶 Распутай нить',box:'📦 Собери заказ'}[k],c=S.gcd[k]||0;return c>0?n+' · через '+dur(c):n},
+  bf:()=>[(S.bf.cal>0?'🎯 брак −3% ещё '+dur(S.bf.cal):''),(S.bf.spd>0?'🧶 скорость +25% ещё '+dur(S.bf.spd):'')].filter(Boolean).join(' · ')||'Калибровка — брак −3% на 10 мин, нить — скорость +25% на 5 мин, сборка — деньги.',
   van:()=>{const a=S.ag.ship,r=a.filter(v=>v.st==='road');return r.length?'🚚 в рейсе '+r.length+' из '+a.length+(r.length===a.length?' · вернётся через '+Math.ceil(Math.min(...r.map(v=>v.t)))+' с':''):'🚚 у ворот'},
   ord:()=>{const o=S.order;if(!o)return'';return '📦 <b>'+o.n+'</b>: '+fn(o.got)+' / '+fn(o.need)+' шт · осталось '+Math.ceil(o.left)+' с · бонус '+fm(o.bonus)+
     '<div class="bar"><i style="width:'+Math.min(100,o.got/o.need*100)+'%"></i></div>'},
@@ -568,11 +607,16 @@ function view(){
    <div class="row" style="margin-top:8px"><div class="grow"><b data-u="pl"></b><div class="sub" data-u="plt"></div></div>
    <button class="btn sec" data-a="spool" data-i="1" data-c="${plPrice()}">1 кг · ${fm(plPrice())}</button>
    <button class="btn sec" data-a="spool" data-i="10" data-c="${plPrice()*8.7}">10 кг · ${fm(plPrice()*8.7)}</button></div></div>
+   <h3>📅 Задания дня</h3><div class="card" data-u="dq"></div>
+   <h3>🎮 Мини-игры <span class="sub">— 20 секунд, за бонус</span></h3><div class="card"><div class="row" style="flex-wrap:wrap;gap:6px">
+    <button class="btn sec" data-a="game" data-i="cal" data-u="gm:cal"></button><button class="btn sec" data-a="game" data-i="knot" data-u="gm:knot"></button><button class="btn sec" data-a="game" data-i="box" data-u="gm:box"></button></div>
+    <div class="sub" style="margin-top:6px" data-u="bf"></div></div>
    <h3>📋 Заказы <span class="sub">— печатай нужное изделие, детали пойдут в заказ</span></h3>`+
    S.board.map((_,i)=>`<div class="card" data-u="bo:${i}"></div>`).join('')+`
    <h3>🤝 Крупные клиенты <span class="sub">— ${LOC[S.loc+1]?'2 из 3 открывают переезд':'постоянная прибавка к цене'}</span></h3>`+
    CL[S.loc].map((c,i)=>`<div class="card"><div class="row"><div class="grow"><b>${c.n}</b><div class="sub">${c.d} · награда ${fm(c.r[0])}, +${Math.round(c.r[1]*100)}% к цене навсегда, 💎 ${c.r[2]}</div></div><div data-u="cd:${i}"></div></div>
      ${cst(i).done?'':c.t.map((_,j)=>`<div class="task" data-u="ct:${i}.${j}"></div>`).join('')}</div>`).join('');
+   h+=rackCard();
    {const vr=Lc().th>=2?18:12;if(S.racks>vr)h+=`<div class="sub" style="margin:-4px 0 10px">На картинке ${vr} стеллажей из ${S.racks} — остальные работают за кадром.</div>`}
    if(S.racks*6<Lc().max)h+=`<div class="card row"><div class="grow"><h3>Новый стеллаж</h3><div class="sub">+6 мест под принтеры</div></div><button class="btn" data-a="rack" data-c="${rcost()}">${fm(rcost())}</button></div>`;
    else h+=`<div class="card sub">На площадке «${Lc().n}» больше ${Lc().max} принтеров не помещается — переезд во вкладке «Рост».</div>`;
@@ -592,6 +636,8 @@ function view(){
     ${i===S.prod?'<span class="tag auto">печатаем</span>':on?`<button class="btn sec" data-a="prod" data-i="${i}">Печатать</button>`:lk?lockTxt(x.lv):`<button class="btn" data-a="prod" data-i="${i}" data-c="${x.u}">Открыть · ${fm(x.u)}</button>`}</div>`});
    return h}
   if(tab==='team')return '<h3>Люди</h3><div class="sub" style="margin-bottom:8px">Нанять можно только на свободное рабочее место. Люди работают и когда игра закрыта, но каждую минуту получают зарплату.</div>'+
+   `<div class="card row"><div class="grow"><h3>🌙 Ночная смена</h3><div class="sub">С 22:00 до 6:00 без неё люди дома: принтеры печатают, а снимать, паковать и возить некому. Со сменой работают все, но ночные часы ×2 к зарплате.</div></div>
+   <button class="btn${S.ns?'':' sec'}" data-a="ns">${S.ns?'Включена':'Выключена'}</button></div>`+
    roles().map(roleCard).join('')+'<h3 style="margin-top:14px">Специалисты</h3>'+MG.map((g,i)=>
    `<div class="card row"><div class="grow"><b>${g.n}</b><div class="sub">${g.d}</div></div>${S.mg[g.k]?'<span class="tag auto">в штате</span>':g.lv>S.loc?lockTxt(g.lv):`<button class="btn" data-a="mg" data-i="${i}" data-c="${g.c}">${fm(g.c)}</button>`}</div>`).join('');
   if(tab==='grow'){let h='<h3>Улучшения</h3>'+UP.map((u,i)=>{const l=S.up[u.k]||0;
@@ -654,6 +700,11 @@ const A={
   bclaim:i=>{const b=S.board[+i];if(!b||b.got<b.need)return;earn(b.bonus,1);S.gems+=b.gem;S.board.splice(+i,1);fillBoard();sound('coin');toast('📋 Заказ «'+b.n+'» сдан: +'+fm(b.bonus)+(b.gem?' и 💎 1':''))},
   bprod:i=>{const b=S.board[+i];if(b&&S.unl[b.p]){S.prod=b.p;toast('🖨 Печатаем «'+PR[b.p].n+'»')}},
   imp:()=>{const n=impN(),c=impC();if(n<4&&S.money>=c){spend(c);S.imp++;sound('coin');toast('🔨 '+IMP[S.loc][n]+': +'+Math.round(IMP_B*100)+'% к цене навсегда')}},
+  ns:()=>{S.ns=S.ns?0:1;toast(S.ns?'🌙 Ночная смена включена: ночью все работают, ночные часы ×2 к зарплате':'🌙 Ночная смена выключена: ночью люди дома')},
+  rk:(v,el)=>{const r=+el.dataset.r;S.rk[r]=v===''?null:+v;toast('🗄 Стеллаж '+(r+1)+': '+(v===''?'основное изделие':'«'+PR[+v].n+'»')+' — со следующего стола')},
+  dqc:i=>{const x=S.dq&&S.dq.q[+i];if(!x||x.cl||dqGot(x)<x.need)return;x.cl=1;const g=Math.max(500,S.rate*300);earn(g,1);S.gems+=3;sound('coin');toast('📅 Задание выполнено: +'+fm(g)+' и 💎 3');
+    if(!S.dq.all&&S.dq.q.every(y=>y.cl)){S.dq.all=1;S.gems+=10;toast('🏆 Все задания дня — 💎 +10')}},
+  game:k=>{if((S.gcd[k]||0)>0){toast('🎮 Эту игру можно снова через '+dur(S.gcd[k]));return}startGame(k)},
   snd:()=>{S.snd=S.snd?0:1},
   boost:()=>{if(S.boostT>0||S.boostCD>0)return;S.boostT=120;S.boostCD=600;sound('coin');toast('📣 Реклама: все цены ×2 на 2 минуты')},
   eco:()=>{S.eco=S.eco?0:1},
@@ -661,10 +712,36 @@ const A={
     [{t:'Продаю',f:()=>{const d=S.daily;S=fresh(S.rep+g,S.all,S.best);S.daily=d;S.intro=true;tab='farm';render();toast('⭐ Репутация теперь '+S.rep)}},{t:'Подумаю',sec:1}])},
   reset:()=>modal('Начать с нуля?','Сотрётся всё, включая звёзды.',[{t:'Стереть',f:()=>{const d=S.daily;S=fresh();S.daily=d;S.intro=true;render()}},{t:'Нет',sec:1}]),
 };
-const LIGHT=new Set(['p','clrall','st','spool','mb','offer','boost','skip','bprod']);
-document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b||b.disabled)return;const a=b.dataset.a;
+const LIGHT=new Set(['p','clrall','st','spool','mb','offer','boost','skip','bprod','game']);
+document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b||b.disabled||b.tagName==='SELECT')return;const a=b.dataset.a;
   const m0=S.money;A[a](b.dataset.i);sound('tap');haptic();if(S.money-m0>.5)pop(e.clientX,e.clientY,'+'+fm(S.money-m0));if(a==='ctask'||a==='offer'||a==='bclaim'||!LIGHT.has(a)||S.pr.length+':'+S.prod!==sig&&a==='mb')render();else upd();save()});
+document.addEventListener('change',e=>{const el=e.target.closest('select[data-a]');if(!el)return;A[el.dataset.a](el.value,el);upd();save()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden)save()});
+// стеллажи: у каждого своё изделие (или основное)
+function rackCard(){const opts=PR.map((x,i)=>S.unl[i]?i:-1).filter(i=>i>=0);if(opts.length<2)return'';
+  const rows=[...Array(S.racks)].map((_,r)=>{const v=S.rk[r];return `<div class="row" style="margin-top:6px"><div class="grow">Стеллаж ${r+1}</div><select data-a="rk" data-r="${r}" style="background:#1b2333;color:#fff;border:1px solid #2b3549;border-radius:8px;padding:6px;max-width:60%">
+    <option value=""${v==null?' selected':''}>основное · ${P().n}</option>${opts.map(i=>`<option value="${i}"${v===i?' selected':''}>${PR[i].n}</option>`).join('')}</select></div>`}).join('');
+  return `<details class="card"${S.racks<=4?' open':''}><summary><b>🗄 Стеллажи — что печатать</b> <span class="sub">· можно держать разные заказы на разных стеллажах</span></summary>${rows}</details>`}
+// ---------- мини-игры: короткие, по желанию, за бонус ----------
+function startGame(k){const box=document.createElement('div');box.className='modal';box.id='mg';document.body.appendChild(box);
+  const end=(win,msg)=>{clearInterval(box._t);S.gcd[k]=300;box.innerHTML='<div class="card" style="text-align:center"><h3>'+(win?'🎉 ':'😕 ')+msg+'</h3><button class="btn" id="mgok">OK</button></div>';
+    box.querySelector('#mgok').onclick=()=>{box.remove();render();save()};sound(win?'coin':'bad')};
+  if(k==='cal'){let x=0,v=1.3,tries=3,hits=0;const z=.15+Math.random()*.6;
+    box.innerHTML='<div class="card" style="width:300px"><h3>🎯 Калибровка стола</h3><div class="sub">Останови метку в зелёной зоне. Нужно 2 попадания из 3.</div>'+
+      '<div style="position:relative;height:26px;background:#2b3549;border-radius:8px;margin:14px 0"><div style="position:absolute;left:'+z*100+'%;width:14%;top:0;bottom:0;background:#2ecc71;border-radius:6px"></div><div id="mk" style="position:absolute;top:-4px;width:6px;height:34px;background:#ff8a1f;border-radius:3px"></div></div>'+
+      '<div class="row"><div class="grow sub" id="mgs">Попыток: 3</div><button class="btn" id="stop">Стоп</button></div></div>';
+    const mk=box.querySelector('#mk');box._t=setInterval(()=>{x+=v*.016;if(x>1||x<0){v=-v;x=Math.max(0,Math.min(1,x))}mk.style.left='calc('+x*100+'% - 3px)'},16);
+    box.querySelector('#stop').onclick=()=>{tries--;if(x>=z&&x<=z+.14){hits++;haptic('medium')}box.querySelector('#mgs').textContent='Попаданий: '+hits+' · попыток: '+tries;
+      if(hits>=2){S.bf.cal=600;S.gems+=1;end(1,'Стол откалиброван: брак −3% на 10 мин и 💎 1')}else if(!tries)end(0,'Не вышло — попробуй через 5 минут');v*=1.25}}
+  if(k==='knot'){let left=6,tl=7;box.innerHTML='<div class="card" style="width:310px"><h3>🧶 Распутай нить</h3><div class="sub">Тапни все узлы за 7 секунд. <b id="tl">7</b></div><div id="ar" style="position:relative;height:240px"></div></div>';
+    const ar=box.querySelector('#ar');for(let i=0;i<6;i++){const b=document.createElement('button');b.className='btn sec';b.textContent='🧶';b.style.cssText='position:absolute;left:'+(5+Math.random()*75)+'%;top:'+(5+Math.random()*75)+'%';
+      b.onclick=()=>{b.remove();haptic();if(--left===0){S.bf.spd=300;end(1,'Нить распутана: скорость печати +25% на 5 мин')}};ar.appendChild(b)}
+    box._t=setInterval(()=>{tl-=.1;const e=box.querySelector('#tl');if(e)e.textContent=Math.ceil(tl);if(tl<=0&&left>0)end(0,'Не успел — попробуй через 5 минут')},100)}
+  if(k==='box'){let nx=1,tl=8;const ord=[1,2,3,4,5,6].sort(()=>Math.random()-.5);
+    box.innerHTML='<div class="card" style="width:300px"><h3>📦 Собери заказ</h3><div class="sub">Тапай коробки по порядку: 1, 2, 3… за 8 секунд. <b id="tl">8</b></div><div class="row" id="ar" style="flex-wrap:wrap;gap:8px;margin-top:10px"></div></div>';
+    const ar=box.querySelector('#ar');for(const n of ord){const b=document.createElement('button');b.className='btn sec';b.style.cssText='width:80px;height:56px;font-size:20px';b.textContent='📦'+n;
+      b.onclick=()=>{if(n!==nx){haptic('heavy');tl-=1;return}b.disabled=true;haptic();if(++nx>6){const g=Math.max(300,S.rate*120);earn(g,1);end(1,'Заказ собран: +'+fm(g))}};ar.appendChild(b)}
+    box._t=setInterval(()=>{tl-=.1;const e=box.querySelector('#tl');if(e)e.textContent=Math.ceil(tl);if(tl<=0&&nx<=6)end(0,'Не успел — попробуй через 5 минут')},100)}}
 
 const VIS={ship:0,cash:0};
 const TH=()=>Lc().th; // оформление 3D-сцены по площадке
@@ -1043,6 +1120,7 @@ function frame() {
   const no = S.loc >= OTK_LV ? Math.min(3, tm('otk')) : 0; pool(P_.otk, no, 'f1');
   P_.otk.forEach((p, i) => { p.x = L.otk + .3 + i * .3; p.z = L.z0 - .15; p.o.rotation.y = 0; p.box.visible = false; p.play(S.q.otk >= 1 ? 'interact-right' : 'idle'); });
   P_.cr.o.visible = !!tm('ship') && f0 && f0.st === 'dock'; P_.cr.x = L.dock - .3; P_.cr.z = L.z0 + 2.2; P_.cr.o.rotation.y = Math.PI * .75; P_.cr.box.visible = false; P_.cr.play(f0 && f0.c ? 'interact-right' : 'idle');
+  if (!working()) for (const p of [...P_.op, ...P_.pack, ...P_.otk, P_.cr]) p.o.visible = false; // ночью без смены — по домам
   for (const p of [...P_.op, ...P_.pack, ...P_.otk, P_.cr]) { p.o.position.set(p.x, 0, p.z); p.mix.update(dt); }
   // сервер и дрон
   server.visible = !!S.mg.srv; server.leds.forEach((l, i) => l.material.color.set(Math.sin(T * 6 + i * 1.7) > 0 ? '#2ecc71' : '#0a3d1f'));
