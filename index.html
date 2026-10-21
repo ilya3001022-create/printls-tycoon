@@ -982,6 +982,7 @@ function build() {
   for (let r = 0; r < L.VR; r++) {
     const [rx, rz] = rackPos(r);
     for (const y of [.06, .5, .95]) { const sh = new THREE.Mesh(gShelf, mShelf); sh.position.set(rx + .61, y, rz + .22); sh.castShadow = sh.receiveShadow = true; world.add(sh); }
+    { const lb = label('Стеллаж ' + (r + 1), false); own.push(lb.material, lb.material.map); lb.scale.multiplyScalar(.95); lb.position.set(rx + .61, 1.2, rz + .22); world.add(lb); } // номер — как в списке полок
     for (const [a, b] of [[0, 0], [1.2, 0], [0, .42], [1.2, .42]]) { const p = new THREE.Mesh(gPost, mMetal); p.position.set(rx + a + .01, .49, rz + b + .01); p.castShadow = true; world.add(p); }
   }
   buildPrinters();
