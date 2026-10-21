@@ -82,14 +82,15 @@ window.onerror=m=>{if(/^Script error/i.test(String(m))){window.__scriptErr=(wind
 const MON=21600; // игровой месяц, с (сутки 720 с × 30)
 const BAL={
   qBase:10, qStep:10, qCost:3000, qF:1.5,            // стол у участка: 10 → 20 → 30… без потолка, цена расширения
-  hire:{op:1500,pack:1000,ship:2000,otk:20000}, hireF:1.35, // наём (поиск, оформление): база и рост
-  place:{op:2000,pack:1500,ship:4000,otk:30000}, placeF:1.4, // рабочее место (стол, тележка, фургон) — без потолка
-  train:{op:3000,pack:2500,ship:4000,otk:30000}, trainF:1.6, // обучение
-  salary:{op:60000,pack:50000,ship:70000,otk:80000}, wageLv:1.15, // ₽/мес на полную ставку; обученный +15%
+  hire:{op:1500,pack:1000,ship:2000,otk:20000,post:15000}, hireF:1.35, // наём (поиск, оформление): база и рост
+  place:{op:2000,pack:1500,ship:4000,otk:30000,post:25000}, placeF:1.4, // рабочее место (стол, тележка, фургон) — без потолка
+  train:{op:3000,pack:2500,ship:4000,otk:30000,post:25000}, trainF:1.6, // обучение
+  salary:{op:60000,pack:50000,ship:70000,otk:80000,post:70000}, wageLv:1.15, // ₽/мес на полную ставку; обученный +15%
   staff:[.3,.5,1,2,3,3],                             // ставка по площадкам: в гараже помощник на полставки, в цехе — 3 смены 24/7
   rent:[0,15000,60000,200000,600000,2000000],        // аренда площадки, ₽/мес
   kwh:10, kw:.12,                                    // свет: ₽ за кВт·ч, кВт на единицу скорости принтера
-  rate:{otk:1.5},                                    // ОТК: шт/с на контролёра (стоит у стола)
+  rate:{otk:1.5,post:1},                             // шт/с на человека у стола: контролёр ОТК, обработчик
+  postP:1.3,                                         // постобработка: шлифовка, грунт, покраска — деталь дороже на 30%
   walk:{op:1.6,pack:1.4}, walkLv:1.1,               // шаг, ед./с; обучение +10% к шагу
   cap:{op:3,pack:5,ship:12}, capLv:{op:2,pack:2,ship:6}, // сколько уносит за раз (тележка); обучение добавляет
   load:.25, packT:.6,                               // взять/положить деталь, упаковать одну, с
@@ -148,11 +149,13 @@ const IMP=[ // обустройство: шаги между переездам�
  ['Цех литья','Робот-упаковщик','Свой автопарк','Экспортный склад']];
 const IMP_K=[.03,.1,.25,.5],IMP_B=.03; // доля цены следующего переезда; прибавка к цене за шаг
 const OTK_LV=4; // ОТК появляется только в цехе на 150 принтеров
+const POST_LV=3; // постобработка — с мастерской
 const ROLE={op:{n:'Операторы',one:'оператор',d:'снимают готовые столы с принтеров',ic:'🧑‍🔧'},
   pack:{n:'Упаковка',one:'упаковщик',d:'пакуют детали',ic:'📦'},
   ship:{n:'Доставка',one:'курьер',d:'возят заказы клиентам',ic:'🚚'},
-  otk:{n:'ОТК',one:'контролёр',d:'ловят брак до клиента',ic:'🔍'}};
-const ST=[{k:'otk',n:'ОТК',v:'Проверить'},{k:'pack',n:'Упаковка',v:'Упаковать'},{k:'ship',n:'Доставка',v:'Отправить'}]; // индекс = зона в 3D
+  otk:{n:'ОТК',one:'контролёр',d:'ловят брак до клиента',ic:'🔍'},
+  post:{n:'Постобработка',one:'обработчик',d:'шлифуют и красят: деталь дороже на 30%',ic:'🎨'}};
+const ST=[{k:'otk',n:'ОТК',v:'Проверить'},{k:'pack',n:'Упаковка',v:'Упаковать'},{k:'ship',n:'Доставка',v:'Отправить'},{k:'post',n:'Постобработка',v:'Обработать'}]; // индекс = зона в 3D
 const MG=[
  {k:'tech',n:'Ремонтник',d:'сам чинит аварии за 8 с',c:60000,lv:1},
  {k:'sup',n:'Снабженец',d:'сам докупает пластик (+10% к цене)',c:100000,lv:2},
@@ -219,30 +222,32 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const KEY='printls_tycoon',VER=16; // ключ больше не меняется; формат — по полю ver и миграциям
+const KEY='printls_tycoon',VER=17; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
 let S, acc={i:0,w:0,e:0,p:0}, accT=0, accN=0;
 const role=()=>({n:0,pl:0,lv:0,a:0});
 const fresh=(rep=0,all=0,best=0)=>({money:3000,gems:0,run:0,all,best,rep,loc:0,racks:1,pr:[{t:0,p:0,st:'run',ft:0}],cnt:[1],prod:0,unl:[true],pl:1500,
-  q:{otk:0,pack:0,ship:0},qc:{otk:0,pack:0,ship:0},team:{op:role(),pack:role(),ship:role(),otk:role()},mg:{},up:{},
+  q:{post:0,otk:0,pack:0,ship:0},qc:{post:0,otk:0,pack:0,ship:0},team:{op:role(),pack:role(),ship:role(),otk:role(),post:role()},mg:{},up:{},
   cl:{},cb:0,build:null,gt:0,daily:null,boostT:0,boostCD:0,offer:null,emT:0,lowpl:0,snd:1,mus:1,eco:0,broke:0,
-  order:null,board:[],ag:{op:[],pack:[],ship:[]},qb:{otk:{},pack:{},ship:{}},rk:[],mp:{},ns:0,star:4.5,seen:{},parts:{noz:2,ptfe:1},trash:0,dq:null,bf:{},gcd:{},cv:0,cf:0,cbd:0,cbuy:0,imp:0,impB:0,out:0,ev:90,last:Date.now(),rate:0,exp:0,stat:{i:0,w:0,e:0,p:0},made:0,rej:0,intro:false,t0:Date.now()});
+  order:null,board:[],ag:{op:[],pack:[],ship:[]},qb:{post:{},otk:{},pack:{},ship:{}},rk:[],mp:{},ns:0,star:4.5,seen:{},parts:{noz:2,ptfe:1},trash:0,dq:null,bf:{},gcd:{},cv:0,cf:0,cbd:0,cbuy:0,imp:0,impB:0,out:0,ev:90,last:Date.now(),rate:0,exp:0,stat:{i:0,w:0,e:0,p:0},made:0,rej:0,intro:false,t0:Date.now()});
 
 // ---------- формулы ----------
 const P=()=>PR[S.prod];
 const Lc=()=>LOC[S.loc];
-const stages=()=>S.loc>=OTK_LV?['otk','pack','ship']:['pack','ship'];
-const roles=()=>S.loc>=OTK_LV?['op','otk','pack','ship']:['op','pack','ship'];
+const stages=()=>[...(S.loc>=POST_LV?['post']:[]),...(S.loc>=OTK_LV?['otk']:[]),'pack','ship'];
+const roles=()=>['op',...stages()];
+const ST_FIX=['post','otk']; // участки, где люди стоят у стола (без хождения)
+const qAll=()=>S.q.post+S.q.otk+S.q.pack+S.q.ship; // деталей на всех столах
 const spd=()=>(1+.1*(S.up.speed||0))*(S.mg.ai?1.1:1)*(S.mg.srv?1.15:1)*(S.bf&&S.bf.spd>0?1.25:1);
-const pm=()=>Lc().m*(1+IMP_B*S.imp)*(1+.1*S.rep)*(1+S.cb)*(1+.05*(S.up.ams||0))*(S.boostT>0?2:1);
+const pm=()=>Lc().m*(1+IMP_B*S.imp)*(1+.1*S.rep)*(1+S.cb)*(1+.05*(S.up.ams||0))*(S.loc>=POST_LV?BAL.postP:1)*(S.boostT>0?2:1);
 const TRASH_MAX=30; // куча мусора: каждые 25 деталей +1; больше 15 — грязно, брак растёт
 const dirt=()=>Math.max(0,((S.trash||0)-15)/5); // +1% брака за каждые 5 пакетов сверх 15
 const defect=()=>Math.min(30,Math.max(1,10-(S.up.cal||0)-(S.bf&&S.bf.cal>0?3:0))+dirt())/100; // брак 10% у новичка (как у Ильи), калибровка до 2%
 const hour=()=>(S.gt/(BAL.day/24)+8)%24;
 const night=()=>{const h=hour();return h>=22||h<6};
 const qcap=k=>BAL.qBase+BAL.qStep*S.qc[k];
-const qcost=k=>BAL.qCost*Math.pow(BAL.qF,S.qc[k])*(k==='otk'?5:1);
+const qcost=k=>BAL.qCost*Math.pow(BAL.qF,S.qc[k])*(k==='otk'?5:k==='post'?3:1);
 const hcost=k=>BAL.hire[k]*Math.pow(BAL.hireF,S.team[k].n);
 const plcost=k=>BAL.place[k]*Math.pow(BAL.placeF,S.team[k].pl);
 const trcost=k=>BAL.train[k]*Math.pow(BAL.trainF,S.team[k].lv);
@@ -260,7 +265,8 @@ let LAY=null,layK='';
 function lay(){const th=Lc().th,k=S.racks+':'+th;if(LAY&&layK===k)return LAY;layK=k;
   const VR=Math.min(S.racks,th>=2?18:12),cols=VR<=4?2:3,rows=Math.ceil(VR/cols),W=.5+cols*1.9+.2,hz=.5+rows*1.5,z0=hz+.45;
   const L={VR,cols,rows,W,hz,z0,H:z0+2.7,otk:.3,pack:Math.max(1.95,W/2-.3),dock:W-1.9};
-  L.drop={otk:[L.otk+.57,z0-.15],pack:[L.pack+.57,z0-.15]}; // куда оператор кладёт детали (северный край стола)
+  L.post=z0+1.1; // стол постобработки — перед ОТК, ближе к проходу
+  L.drop={otk:[L.otk+.57,z0-.15],pack:[L.pack+.57,z0-.15],post:[L.otk+.57,L.post-.15]}; // куда оператор кладёт детали (северный край стола)
   L.sPack=[L.pack+.57,z0+.95];L.sDock=[L.dock-.3,z0+1.25]; // где стоит упаковщик и куда носит коробки
   return LAY=L}
 const rp=r=>{const L=lay();return [.5+(r%L.cols)*1.9,.5+(r/L.cols|0)*1.5]}; // угол стеллажа
@@ -278,7 +284,7 @@ function opTrip(){const L=lay(),k=layK+':'+stages()[0]+':'+Math.min(L.VR*6,S.pr.
   for(let i=0;i<n;i++){const f=front(i);d+=plen(t,route(t,f))+plen(f,route(f,t))}opD=d/n;OPT.set(k,opD);return opD}
 // шт/с участка: считается из тех же шагов, грузов и рейсов, что делают человечки
 const sr=k=>{const r=S.team[k],n=r.n;if(!n)return 0;
-  if(k==='otk')return n*BAL.rate.otk*Math.pow(1.3,r.lv)*(1+.25*(S.up.conv||0))*(S.broke?.5:1);
+  if(ST_FIX.includes(k))return n*BAL.rate[k]*Math.pow(1.3,r.lv)*(1+.25*(S.up.conv||0))*(S.broke?.5:1);
   const c=capOf(k);
   if(k==='op')return n*c/(c*BAL.load*2+opTrip()/vOf('op'));
   if(k==='pack'){const L=lay();return n*c/(c*(BAL.packT+BAL.load)+2*plen(L.sPack,[L.sDock])/vOf('pack'))}
@@ -434,7 +440,7 @@ function tick(dt){
   if(wk){for(const a of S.ag.op)stepOp(a,dt);for(const a of S.ag.pack)stepPack(a,dt)}
   S.ag.ship.forEach((f,i)=>stepVan(f,i,wk?dt:0,dt)); // в рейсе фургон доезжает и ночью, грузит — только смена
   if(wk)offScreen(dt);
-  if(wk&&S.loc>=OTK_LV&&S.team.otk.n){const r=S.team.otk;r.a=Math.min(r.a+sr('otk')*dt,5+sr('otk')*dt);while(r.a>=1&&proc('otk',1))r.a-=1} // контролёры стоят у стола
+  if(wk)for(const k of ST_FIX)if(stages().includes(k)&&S.team[k].n){const r=S.team[k];r.a=Math.min(r.a+sr(k)*dt,5+sr(k)*dt);while(r.a>=1&&proc(k,1))r.a-=1} // контролёры и обработчики стоят у стола
   if(S.mg.sup)supply();
   if(S.mg.clean&&(S.trash||0)>0){S.cln=(S.cln||0)+dt;if(S.cln>20){S.cln=0;S.trash--}} // уборщица: пакет каждые 20 с
   // расходы: зарплаты и электричество; нечем платить — люди работают вполсилы
@@ -442,10 +448,10 @@ function tick(dt){
   if(S.money<0){S.money=0;if(!S.broke){S.broke=1;toast(wages()?'💸 Нечем платить зарплату — люди работают вполсилы. Уволь лишних или подними доход':'💡 Нечем платить за свет — отвези готовое, чтобы заработать');sound('bad')}}else if(S.money>w*50)S.broke=0;
   // выручка запчастью: все принтеры стоят из-за поломок, а на запчасть денег нет — сосед/знакомый даёт бесплатно (раз в 2 мин)
   {const br=S.pr.filter(x=>x.st==='fail'&&FAULTS[x.fk||0].p);if(br.length&&!S.pr.some(x=>x.st==='run'||x.st==='done')&&S.emT<=0){const pk=FAULTS[br[0].fk||0].p,pt=PT_(pk);
-    if(!(S.parts[pk]>0)&&S.money<pt.c*1.2&&(S.q.otk+S.q.pack+S.q.ship)*mix().p*pm()+S.money<pt.c*1.2){S.parts[pk]=(S.parts[pk]||0)+1;S.emT=120;toast('🤝 Знакомый выручил: дал «'+pt.n+'» бесплатно. Держи запас запчастей!')}}}
+    if(!(S.parts[pk]>0)&&S.money<pt.c*1.2&&qAll()*mix().p*pm()+S.money<pt.c*1.2){S.parts[pk]=(S.parts[pk]||0)+1;S.emT=120;toast('🤝 Знакомый выручил: дал «'+pt.n+'» бесплатно. Держи запас запчастей!')}}}
   // аварийная катушка: без пластика и без денег игра не должна умирать
   if(S.emT>0)S.emT-=dt;
-  if(S.pl<p.g&&S.money<plPrice()&&(S.q.otk+S.q.pack+S.q.ship)*mix().p*pm()+S.money<plPrice()&&!S.pr.some(x=>x.st==='run'||x.st==='done')&&S.emT<=0){S.pl+=500;S.emT=60;toast('🧵 Аварийная катушка 0,5 кг — бесплатно. Оставляй деньги на пластик!')}
+  if(S.pl<p.g&&S.money<plPrice()&&qAll()*mix().p*pm()+S.money<plPrice()&&!S.pr.some(x=>x.st==='run'||x.st==='done')&&S.emT<=0){S.pl+=500;S.emT=60;toast('🧵 Аварийная катушка 0,5 кг — бесплатно. Оставляй деньги на пластик!')}
   if(!S.mg.sup&&S.pl<p.g*S.pr.length*4){if(!S.lowpl){S.lowpl=1;toast('🧵 Пластик кончается — купи катушку под цехом');sound('bad')}}else S.lowpl=0;
   if(S.offer){S.offer.left-=dt;if(S.offer.left<=0)S.offer=null}
   if(S.boostT>0)S.boostT-=dt;if(S.boostCD>0)S.boostCD-=dt;
@@ -459,6 +465,8 @@ function tick(dt){
 function moved(){const to=S.build.to;S.build=null;S.loc=to;S.impB=S.imp;sound('coin');
   toast('🚚 Переехали: '+LOC[to].n+'. Мест под принтеры: '+LOC[to].max);
   if(to===MP_LV&&typeof modal==='function')modal('🛍 Маркетплейсы','Теперь продаёшь через маркетплейсы — спрос больше, но у магазина есть рейтинг ★.<br><br>Брак тянет рейтинг вниз, сорванные заказы с доски — тоже. Чем выше рейтинг, тем больше спрос. Калибровка снижает брак — вкладка «Рост».');
+  if(to===POST_LV){const r=S.team.post;r.pl=Math.max(r.pl,1);r.n=Math.max(r.n,1); // первый обработчик сразу в штате
+    if(typeof modal==='function')modal('🎨 Открыта постобработка','В мастерской детали шлифуют, грунтуют и красят — каждая продаётся <b>на 30% дороже</b>.<br><br>Операторы теперь несут детали на стол постобработки. Первый обработчик уже в штате. Следи, чтобы стол не забился: нанимай людей во вкладке «Люди».')}
   if(to===OTK_LV){const r=S.team.otk;r.pl=Math.max(r.pl,1);r.n=Math.max(r.n,1); // без контролёра ОТК встанет сразу
     if(typeof modal==='function')modal('🔍 Открыт участок ОТК','Теперь каждая деталь проходит контроль: брак ловим до клиента, возвратов больше нет.<br><br>Первый контролёр уже в штате. Следи за очередью ОТК во вкладке «Участки» и нанимай ещё людей во вкладке «Люди», иначе ОТК забьётся и доставка встанет.')}
   if(typeof render==='function')render()}
@@ -516,6 +524,8 @@ const skipCost=()=>S.build?Math.max(1,Math.ceil((S.build.end-Date.now())/60000/B
 // старые сохранения: v6 и v7 совместимы по изделиям; более ранние — другая экономика, их не тянем
 const OLDC=[40000,800000,12e6,1.8e9,110e9,110e9],NEWC=[20000,250000,2.5e6,20e6,200e6,200e6]; // цены следующего переезда до/после перехода на рубли
 const MIG={6:s=>{s.ag={op:[],pack:[],ship:[]};return s},7:s=>s,
+  16:s=>{if((s.loc||0)>=3&&s.team&&s.team.pack){const p=s.team.pack;s.team.post={n:Math.max(1,p.n),pl:Math.max(1,p.pl,p.n),lv:p.lv||0,a:0};s.qc=s.qc||{};s.qc.post=(s.qc.pack||0)} // постобработка: уже переехавшим — бригада под размер упаковки, ферма не встаёт
+    return s},
   15:s=>{s.mus=1;return s}, // музыка по умолчанию — тихо, выключается в «Росте»
   14:s=>{s.trash=0;return s},
   13:s=>{s.parts={noz:2,fan:1,ptfe:1};(s.pr||[]).forEach(x=>{if(x.st==='fail')x.fk=0});return s}, // старые аварии — «спагетти», стартовый набор запчастей
@@ -592,7 +602,7 @@ function hintText(){const f=[...stages()].reverse().find(k=>S.q[k]>=qcap(k)-.01)
   if(S.pr.some(x=>x.st==='fail')&&!S.mg.tech&&!S.mg.ai)return'👉 Красный «!» — авария. Тапни принтер, чтобы починить';
   if(S.pr.every(x=>x.st==='nopl'))return S.money>=plPrice()?'👉 Кончился пластик — купи катушку под цехом':'👉 Кончился пластик — отвези готовое, деньги пойдут на катушку';
   if(f){const r=S.team[f],nm='«'+(f==='ship'?'Склад у ворот':ROLE[f].n)+'» '+zab(f)+' '+qcap(f)+'/'+qcap(f);
-    if(!r.n&&(f==='otk'||S.made>400))return'👉 '+nm+' — '+(r.pl?'найми ':'купи рабочее место и найми ')+ROLE[f].one+'а во вкладке «Люди»';
+    if(!r.n&&(ST_FIX.includes(f)||S.made>400))return'👉 '+nm+' — '+(r.pl?'найми ':'купи рабочее место и найми ')+ROLE[f].one+'а во вкладке «Люди»';
     return'👉 '+nm+' — тапни '+(f==='ship'?'машину':'стол')+(r.n?', найми ещё людей':'')+' или расширь в «Участках»'}
   if(S.pr.some(x=>x.st==='done')&&!tm('op'))return'👉 Тапни принтер с ✓ — сними готовый стол';
   if(S.q.pack>=1&&!tm('pack'))return'👉 Тапни стол упаковки';
@@ -639,7 +649,7 @@ const GATE={shop:['🛒 Магазин',()=>S.made>=5||S.pr.length>1],board:['�
   games:['🎮 Мини-игры',()=>S.made>=60||S.loc>0],dq:['📅 Задания дня',()=>S.made>=80||S.loc>0]};
 const opn=k=>!!(S.seen&&S.seen[k]); // система уже открыта
 function gates(){let nw=0;for(const k in GATE)if(!opn(k)&&GATE[k][1]()){S.seen=S.seen||{};S.seen[k]=1;nw=1;toast('✨ Открыто: '+GATE[k][0])}if(nw)render()}
-const TRN={op:'Обучить: шаг +10%, тележка +1',pack:'Обучить: шаг +10%, тележка +1',ship:'Обучить: фургон +4 места',otk:'Обучить +30%'};
+const TRN={op:'Обучить: шаг +10%, тележка +1',pack:'Обучить: шаг +10%, тележка +1',ship:'Обучить: фургон +4 места',otk:'Обучить +30%',post:'Обучить +30%'};
 const lockTxt=lv=>'<span class="tag">🔒 '+LOC[lv].n+'</span>';
 const U={ // живые подписи, обновляются 10 раз в секунду
   pl:()=>(S.pl/1000).toFixed(2).replace('.',',')+' кг '+P().m,
@@ -691,7 +701,7 @@ const U={ // живые подписи, обновляются 10 раз в се
     <div class="row"><div class="grow">Пластик</div><b class="bad">−${fm(s.p*60)}</b></div><div class="row" style="border-top:1px solid #2b3549;margin-top:4px;padding-top:4px"><div class="grow"><b>Итого за минуту</b></div><b class="${n>=0?'ok':'bad'}">${n>=0?'+':'−'}${fm(Math.abs(n)*60)}</b></div>`},
 };
 function stageCard(k){const f=stages()[0],man=k==='ship'?'🚚':'👆';return `<div class="card"><div class="row"><div class="grow"><h3>${ROLE[k].ic} ${ROLE[k].n} <span class="bad" data-u="bn:${k}"></span></h3>
-  <div class="sub">${k==='ship'?'у ворот':'на столе'} <b data-u="q:${k}"></b> · <span data-u="sr:${k}"></span>${k==='ship'?' · <span data-u="van"></span>':''}${k==='otk'?' · брак '+Math.round(defect()*100)+'%':''}</div></div>
+  <div class="sub">${k==='ship'?'у ворот':'на столе'} <b data-u="q:${k}"></b> · <span data-u="sr:${k}"></span>${k==='ship'?' · <span data-u="van"></span>':''}${k==='otk'?' · брак '+Math.round(defect()*100)+'%':''}${k==='post'?' · деталь +'+Math.round((BAL.postP-1)*100)+'% к цене':''}</div></div>
   <button class="btn sec" data-a="st" data-i="${ST.findIndex(s=>s.k===k)}">${man} ${ST.find(s=>s.k===k).v}</button></div>
   <div class="row" style="margin-top:8px"><div class="grow sub">${'Расширить стол: '+qcap(k)+' → '+(qcap(k)+BAL.qStep)+' мест'}</div>
   <button class="btn" data-a="qx" data-i="${k}" data-c="${qcost(k)}">${fm(qcost(k))}</button></div></div><div class="arrow">↓</div>`}
@@ -754,7 +764,7 @@ function view(){
    const nl=LOC[S.loc+1];
    h+='<h3 style="margin-top:14px">Обустройство</h3><div class="card" data-u="imp"></div>'+
     '<h3 style="margin-top:14px">Площадка</h3><div class="card"><b>'+Lc().n+'</b><div class="sub">до '+Lc().max+' принтеров · аренда '+fm(BAL.rent[S.loc])+'/мес · канал продаж ×'+String(Lc().m).replace('.',',')+'</div>'+
-    (S.build?'<div style="margin-top:8px" data-u="bld"></div>':nl?`<div class="row" style="margin-top:8px"><div class="grow sub">Переезд: ${nl.n} — до ${nl.max} принтеров${S.loc+1===OTK_LV?', открывается ОТК':''}. Стройка ${dur(BAL.bt[S.loc+1])}.<br>${clDone(S.loc)>=2?'✅ клиенты довольны':'🤝 нужно 2 крупных клиента из 3, сейчас '+clDone(S.loc)}</div><button class="btn" data-a="loc" data-c="${nl.c}" ${clDone(S.loc)>=2?'':'disabled data-lock'}>${fm(nl.c)}</button></div>`:'<div class="sub ok" style="margin-top:6px">Ты на вершине. Дальше — только продажа бизнеса.</div>')+'</div>';
+    (S.build?'<div style="margin-top:8px" data-u="bld"></div>':nl?`<div class="row" style="margin-top:8px"><div class="grow sub">Переезд: ${nl.n} — до ${nl.max} принтеров${S.loc+1===OTK_LV?', открывается ОТК':S.loc+1===POST_LV?', открывается постобработка (+30% к цене)':''}. Стройка ${dur(BAL.bt[S.loc+1])}.<br>${clDone(S.loc)>=2?'✅ клиенты довольны':'🤝 нужно 2 крупных клиента из 3, сейчас '+clDone(S.loc)}</div><button class="btn" data-a="loc" data-c="${nl.c}" ${clDone(S.loc)>=2?'':'disabled data-lock'}>${fm(nl.c)}</button></div>`:'<div class="sub ok" style="margin-top:6px">Ты на вершине. Дальше — только продажа бизнеса.</div>')+'</div>';
    if(S.loc>=5)h+=`<h3 style="margin-top:14px">Продать бизнес</h3><div class="card"><div class="sub">Всё обнулится, а репутация ⭐ останется: каждая звезда +10% к доходу навсегда. Сейчас ⭐ ${S.rep}.</div>
     <div class="row" style="margin-top:8px"><div class="grow sub">${prestGain()?'Получишь ⭐ '+prestGain():'Нужно заработать за круг 1 млрд ₽'}</div><button class="btn" data-a="prest" ${prestGain()?'':'disabled'}>Продать</button></div></div>`;
    h+=`<div class="sub" style="text-align:center;margin:4px 0 10px">Printls Tycoon · от команды Printls3D</div><div class="card sub">Заработано за всё время: ${fm(S.all)} · сделано деталей: ${fn(S.made)} · в игре ${dur((Date.now()-S.t0)/1000)}<div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn sec" data-a="snd">${S.snd?'🔊 Звук вкл':'🔇 Звук выкл'}</button><button class="btn sec" data-a="mus">${S.mus?'🎵 Музыка вкл':'🎵 Музыка выкл'}</button><button class="btn sec" data-a="eco">${S.eco?'🪫 Графика: экономная':'✨ Графика: полная'}</button><button class="btn sec" data-a="exp">📋 Код сохранения</button><button class="btn sec" data-a="imp2">📥 Загрузить код</button><button class="btn sec" data-a="reset">Начать с нуля</button></div><div class="sub" style="margin-top:6px">${TG?"☁️ Прогресс сохраняется в облаке Telegram — откроешь бота с любого устройства, он на месте.":"⚠️ Игра открыта не через бота: прогресс хранится только в этом браузере. Надёжнее открывать кнопкой «Играть» в боте — там облако Telegram. Или сохрани код."}</div></div>`;
@@ -783,7 +793,7 @@ const A={
     else if(x.st==='run'){x.p+=.08;if(x.p>=1){x.p=1;x.st='done'}}else if(x.st==='nopl')toast('🧵 Нет пластика — купи катушку')},
   clrall:()=>{for(const x of S.pr)if(x.st==='done'&&!clear(x)){A.p(S.pr.indexOf(x));break}},
   spool:i=>{const c=+i===10?plPrice()*8.7:plPrice();if(S.money>=c){spend(c,'p');S.pl+=i*1000}},
-  st:i=>{const k=ST[i].k;if(!stages().includes(k)){toast('🔍 ОТК откроется в «'+LOC[OTK_LV].n+'»');return}
+  st:i=>{const k=ST[i].k;if(!stages().includes(k)){toast(k==='post'?'🎨 Постобработка откроется в «'+LOC[POST_LV].n+'»':'🔍 ОТК откроется в «'+LOC[OTK_LV].n+'»');return}
     if(k==='ship'){if(!tapVan()&&performance.now()-fullT>2000){fullT=performance.now();toast(S.ag.ship.some(v=>v.st==='dock')?'🚚 Грузить нечего — сначала упакуй':'🚚 Фургон в рейсе — вернётся через '+Math.ceil(Math.min(...S.ag.ship.map(v=>v.t)))+' с')}return}proc(k,BAL.manual)},
   qx:k=>{const c=qcost(k);if(S.money>=c){spend(c);S.qc[k]++;toast('📐 Стол «'+ROLE[k].n+'»: теперь '+qcap(k)+' мест')}},
   hire:k=>{const r=S.team[k],c=hcost(k);if(S.money>=c&&r.n<r.pl){spend(c);r.n++;toast('👤 '+ROLE[k].one[0].toUpperCase()+ROLE[k].one.slice(1)+' в штате. Зарплата '+fm(wageOf(k)*60)+'/мин')}},
@@ -871,7 +881,7 @@ const TH=()=>Lc().th; // оформление 3D-сцены по площадк�
 // ---------- запуск ----------
 S=load();window.tgInit=tgInit;tgInit();
 if(location.hash==='#test'&&location.protocol==='file:'){S=fresh();S.money=5e6;S.gems=40;const L=+(location.search.slice(1)||0);S.loc=L;S.racks=Math.min(4,Math.ceil(LOC[L].max/6));
-  for(const k of ['op','pack','ship','otk']){S.team[k]={n:2,pl:3,lv:1,a:0}}S.mg={tech:1};
+  for(const k of ['op','pack','ship','otk','post']){S.team[k]={n:2,pl:3,lv:1,a:0}}S.mg={tech:1};
   for(let i=1;i<Math.min(17,LOC[L].max);i++){const t=Math.min(i%8,7);S.pr.push({t,p:Math.random(),st:['run','run','done','fail','nopl'][i%5],ft:0});S.cnt[t]=(S.cnt[t]||0)+1}
   S.order={n:'Сувениры для выставки',need:120,got:47,left:83,bonus:36000};S.q.pack=7;S.intro=true}
 render();offline();
@@ -1129,7 +1139,7 @@ function build() {
   if (TH() >= 1) put(fit('coffee', .14), L.W - 1.2, .14, 0, .37);                                      // кофемашина на столе
   if (TH() >= 2) { put(fit('hscr', .9), L.pack + .57, L.z0 + .32, 0, 1.15); put(fit('tv', .45), L.W - .55, .06, 0, .52); } // экраны с заказами
   if (S.loc >= OTK_LV) put(fit('scan', .36), L.otk + 1.55, L.z0 + .3);                                  // сканер ОТК
-  if (S.loc >= 3) put(fit('mach', .55), L.otk + 1.55, L.z0 + 1.15, Math.PI / 2);                       // станок постобработки
+  if (S.loc >= POST_LV) put(fit('mach', .5), L.otk + .57, L.post + 1.15);                            // станок постобработки — за её столом, у стены (рядом склад у ворот)
   arm = null; if (TH() === 3) arm = put(fit('arm', .7), L.pack + 1.35, L.z0 + .32);                     // робот-упаковщик
   // стена катушек: столько катушек, сколько килограммов пластика на складе (до 24)
   spools = []; { const x = L.W - .14, z1 = 1.0, z2 = Math.min(L.hz - .2, 3.2), sh = new THREE.Mesh(G(.2, .02, z2 - z1 + .1), mShelf);
@@ -1197,6 +1207,7 @@ function build() {
     zones[k] = {stack, lb, x, z};
   };
   if (S.loc >= OTK_LV) mkZone(0, L.otk, L.z0, 'tray'); mkZone(1, L.pack, L.z0, 'box');
+  if (S.loc >= POST_LV) mkZone(3, L.otk, L.post, 'tray');
   van = mkVan(); van.g.position.set(L.dock, 0, L.z0 + 1.65); world.add(van.g);
   const vh = new THREE.Mesh(G(1.5, .9, .8), new THREE.MeshBasicMaterial({visible: false})); vh.userData.zone = 2; van.g.add(vh); vh.position.set(.6, .4, 0); hits.push(vh);
   zones[2] = {lb: label('', false)}; own.push(zones[2].lb.material); zones[2].lb.position.set(.75, 1.3, 0); van.g.add(zones[2].lb); // подпись фургона — ЕГО груз, едет с ним
@@ -1210,7 +1221,7 @@ function build() {
   const dh = new THREE.Mesh(G(.7, .6, .6), new THREE.MeshBasicMaterial({visible: false})); dh.position.set(px, .3, pz); dh.userData.zone = 2; world.add(dh); hits.push(dh);
   zones.dock = {stack: dstack, lb: dlb, glb};
   // люди
-  people = {op: [], pack: [], otk: [], cr: person('f2')};
+  people = {op: [], pack: [], otk: [], post: [], cr: person('f2')};
   // сервер и ИИ-дрон
   server = new THREE.Group(); const sb = new THREE.Mesh(G(.38, .9, .34), M('#20242c')); sb.position.y = .45; sb.castShadow = true; server.add(sb);
   server.leds = []; for (let i = 0; i < 6; i++) { const l = new THREE.Mesh(G(.04, .04, .01), new THREE.MeshBasicMaterial({color: '#2ecc71'})); l.position.set(-.08 + (i % 2) * .16, .2 + (i >> 1) * .22, .175); server.add(l); server.leds.push(l); }
@@ -1320,7 +1331,7 @@ function frame() {
   }
   // столы: коробки по очереди, подписи; без людей — мигаем «тапни»
   const blink = Math.sin(T * 6) > -.3;
-  [['otk', 0, 'ОТК'], ['pack', 1, 'Упаковка']].forEach(([k, i, n]) => {
+  [['otk', 0, 'ОТК'], ['pack', 1, 'Упаковка'], ['post', 3, 'Обработка']].forEach(([k, i, n]) => {
     const z = zones[i], q = S.q[k]; if (!z) return; z.stack.forEach((b, j) => b.visible = j < Math.min(8, Math.ceil(q / qcap(k) * 8)));
     setLabel(z.lb, n + ' ' + fn(q) + '/' + qcap(k), !tm(k) && q >= 1 || q >= qcap(k), blink);
   });
@@ -1344,9 +1355,11 @@ function frame() {
   pool(P_.pack, S.ag.pack.length, ['m2', 'f1', 'm3']); S.ag.pack.forEach((a, i) => show(P_.pack[i], a, dt));
   const no = S.loc >= OTK_LV ? Math.min(3, tm('otk')) : 0; pool(P_.otk, no, ['f1', 'f3']);
   P_.otk.forEach((p, i) => { p.x = L.otk + .3 + i * .3; p.z = L.z0 - .15; p.o.rotation.y = 0; p.box.visible = false; p.play(S.q.otk >= 1 ? 'interact-right' : 'idle'); });
+  const nq = S.loc >= POST_LV ? Math.min(3, tm('post')) : 0; pool(P_.post, nq, ['m2', 'f3']);
+  P_.post.forEach((p, i) => { p.x = L.otk + .3 + i * .3; p.z = L.post - .15; p.o.rotation.y = 0; p.box.visible = false; p.play(S.q.post >= 1 ? 'interact-right' : 'idle'); }); // обработчики — у стола, как контролёры ОТК
   P_.cr.o.visible = !!tm('ship') && f0 && f0.st === 'dock'; P_.cr.x = L.dock - .3; P_.cr.z = L.z0 + 2.2; P_.cr.o.rotation.y = Math.PI * .75; P_.cr.box.visible = false; P_.cr.play(f0 && f0.c ? 'interact-right' : 'idle');
-  if (!working()) for (const p of [...P_.op, ...P_.pack, ...P_.otk, P_.cr]) p.o.visible = false; // ночью без смены — по домам
-  for (const p of [...P_.op, ...P_.pack, ...P_.otk, P_.cr]) { p.o.position.set(p.x, 0, p.z); p.mix.update(dt); }
+  if (!working()) for (const p of [...P_.op, ...P_.pack, ...P_.otk, ...P_.post, P_.cr]) p.o.visible = false; // ночью без смены — по домам
+  for (const p of [...P_.op, ...P_.pack, ...P_.otk, ...P_.post, P_.cr]) { p.o.position.set(p.x, 0, p.z); p.mix.update(dt); }
   // сервер и дрон
   server.visible = !!S.mg.srv; server.leds.forEach((l, i) => l.material.color.set(Math.sin(T * 6 + i * 1.7) > 0 ? '#2ecc71' : '#0a3d1f'));
   drone.visible = drone.beam.visible = !!S.mg.ai;
