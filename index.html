@@ -48,7 +48,7 @@ h3{margin:0 0 6px;font-size:15px}
 .out{border:1px solid var(--warn)}
 .arrow{text-align:center;color:var(--mu);margin:-4px 0 6px}
 .sel{box-shadow:inset 0 0 0 2px var(--ac)}
-#scene{position:relative;width:100%;height:min(calc(var(--tg-viewport-stable-height,100vh)*.58),520px);border-radius:14px;overflow:hidden;background:#0b0f16;margin-bottom:10px;touch-action:none}
+#scene{position:relative;width:100%;height:clamp(260px,calc(var(--tg-viewport-stable-height,100vh)*.58),520px); /* после сворачивания Telegram может отдать высоту 0 — цех не схлопнется */border-radius:14px;overflow:hidden;background:#0b0f16;margin-bottom:10px;touch-action:none}
 #scene canvas{display:block;touch-action:none}
 #scene .hint{position:absolute;left:8px;bottom:6px;font-size:11px;color:#fff9;pointer-events:none}
 #scene .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mu);text-align:center;padding:20px}
@@ -911,6 +911,9 @@ wrap.prepend(R.domElement);
 let glLost = false; // iOS при сворачивании может отобрать WebGL — ждём возврата и пересобираем сцену
 R.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); glLost = true; });
 R.domElement.addEventListener('webglcontextrestored', () => { glLost = false; built = ''; });
+// вернулись в приложение, а графику так и не вернули — восстанавливаем сами
+document.addEventListener('visibilitychange', () => { if (document.hidden) return; setTimeout(() => { try { if (R.getContext().isContextLost()) R.forceContextRestore(); } catch (e) {} built = ''; }, 300);
+  setTimeout(() => { try { if (!document.hidden && R.getContext().isContextLost()) { save(); location.reload(); } } catch (e) {} }, 2300); }); // так и не вернули — сохраняемся и перезапускаем страницу
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#0b0f16');
 const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 200);
