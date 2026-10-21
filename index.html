@@ -160,6 +160,7 @@ const UP=[
  {k:'cam',n:'Камеры',d:'ловят спагетти до аварии (+20% за уровень)',c:20000,f:2,max:4,lv:2},
  {k:'ams',n:'AMS на всех',d:'многоцвет: +5% к цене изделий',c:40000,f:1.8,max:6,lv:2},
  {k:'conv',n:'Конвейер',d:'+25% к скорости всех участков',c:3000000,f:1.8,max:10,lv:3},
+ {k:'farmsw',n:'ПО фермы',d:'единая очередь на весь парк: оператор уносит +50% деталей за рейс (как SimplyPrint, Bambu Farm Manager)',c:500000,f:2.4,max:3,lv:3},
  {k:'mkt',n:'Маркетинг',d:'+15% к спросу: карточки, реклама, блогеры',c:5000,f:1.45,max:999,lv:0}];
 const tm=k=>S.team[k].n;
 const CL=[ // крупные клиенты: 3 задачи → постоянная прибавка к цене. r: деньги, прибавка, 💎
@@ -183,7 +184,7 @@ const CL=[ // крупные клиенты: 3 задачи → постоянн
   {n:'Космос',d:'кронштейны для спутника',t:[['Скорость печати 15 ур.',()=>S.up.speed||0,15],['Брак 2%',()=>S.up.cal||0,8],['Доход 5 000 ₽/с',()=>S.rate,5000]],r:[8e7,.1,150]}]];
 const ORD=['Сувениры для выставки','Брелоки для вендинга','Фигурки к Новому году','Партия для автосервиса','Подарки для корпоратива','Мерч для блогера'];
 const FAULT=['Спагетти','Засор хотенда','Отлип стол','Застряла нить в AMS'];
-const KEY='printls_tycoon',VER=12; // ключ больше не меняется; формат — по полю ver и миграциям
+const KEY='printls_tycoon',VER=13; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
 let S, acc={i:0,w:0,e:0,p:0}, accT=0, accN=0;
@@ -191,7 +192,7 @@ const role=()=>({n:0,pl:0,lv:0,a:0});
 const fresh=(rep=0,all=0,best=0)=>({money:3000,gems:0,run:0,all,best,rep,loc:0,racks:1,pr:[{t:0,p:0,st:'run',ft:0}],cnt:[1],prod:0,unl:[true],pl:1500,
   q:{otk:0,pack:0,ship:0},qc:{otk:0,pack:0,ship:0},team:{op:role(),pack:role(),ship:role(),otk:role()},mg:{},up:{},
   cl:{},cb:0,build:null,gt:0,daily:null,boostT:0,boostCD:0,offer:null,emT:0,lowpl:0,snd:1,eco:0,broke:0,
-  order:null,board:[],ag:{op:[],pack:[],ship:[]},qb:{otk:{},pack:{},ship:{}},rk:[],mp:{},ns:0,dq:null,bf:{},gcd:{},cv:0,cf:0,cbd:0,cbuy:0,imp:0,impB:0,out:0,ev:90,last:Date.now(),rate:0,exp:0,stat:{i:0,w:0,e:0,p:0},made:0,rej:0,intro:false,t0:Date.now()});
+  order:null,board:[],ag:{op:[],pack:[],ship:[]},qb:{otk:{},pack:{},ship:{}},rk:[],mp:{},ns:0,star:4.5,seen:{},dq:null,bf:{},gcd:{},cv:0,cf:0,cbd:0,cbuy:0,imp:0,impB:0,out:0,ev:90,last:Date.now(),rate:0,exp:0,stat:{i:0,w:0,e:0,p:0},made:0,rej:0,intro:false,t0:Date.now()});
 
 // ---------- формулы ----------
 const P=()=>PR[S.prod];
@@ -233,7 +234,7 @@ const front=i=>{const L=lay();let FR=FRM.get(layK);if(!FR)FRM.set(layK,FR=[]);if
 const route=(a,b)=>Math.abs(a[1]-b[1])<.05?[b]:[[.22,a[1]],[.22,b[1]],b];
 const plen=(a,pts)=>{let d=0,c=a;for(const q of pts){d+=Math.abs(q[0]-c[0])+Math.abs(q[1]-c[1]);c=q}return d};
 const vOf=k=>BAL.walk[k]*Math.pow(BAL.walkLv,S.team[k].lv)*(1+.25*(S.up.conv||0))*(S.broke?.5:1);
-const capOf=k=>BAL.cap[k]+BAL.capLv[k]*S.team[k].lv;
+const capOf=k=>Math.round((BAL.cap[k]+BAL.capLv[k]*S.team[k].lv)*(k==='op'?1+.5*(S.up.farmsw||0):1));
 const road=()=>BAL.road[S.loc]*(night()?BAL.roadNight:1)/(1+.1*(S.up.conv||0));
 const OPT=new Map(); // средний рейс оператора туда-обратно — для офлайна и подсказок; кэш по раскладке
 function opTrip(){const L=lay(),k=layK+':'+stages()[0]+':'+Math.min(L.VR*6,S.pr.length);if(OPT.has(k))return OPT.get(k);let opD;const t=L.drop[stages()[0]];let d=0;const n=Math.min(L.VR*6,Math.max(1,S.pr.length));
@@ -255,7 +256,10 @@ const clDone=l=>(S.cl[l]||[]).filter(c=>c&&c.done).length;
 const impN=()=>S.imp-S.impB; // шагов обустройства на этой площадке
 const impC=()=>(LOC[S.loc+1]?LOC[S.loc+1].c:LOC[5].c*20)*IMP_K[impN()];
 // спрос, ₽/с: база площадки × маркетинг × постоянные клиенты × реклама; копится до 2 мин вперёд
-const demand=()=>BAL.dem[S.loc]*(1+BAL.mkt*(S.up.mkt||0))*(1+S.cb)*(S.boostT>0?2:1);
+const MP_LV=2; // маркетплейсы — с мини-офиса
+const starT=()=>Math.max(1,Math.min(5,5.2-30*defect())); // к какому рейтингу тянется магазин: брак 10% → ★2,2, 2% → ★4,6
+const starM=()=>S.loc>=MP_LV?.5+.12*(S.star||4.5):1;    // спрос от рейтинга: ★5 → ×1,1, ★2 → ×0,74
+const demand=()=>BAL.dem[S.loc]*(1+BAL.mkt*(S.up.mkt||0))*(1+S.cb)*starM()*(S.boostT>0?2:1);
 const prestGain=()=>S.loc<5?0:Math.floor(Math.sqrt(S.run/1e8));
 function dur(s){s=Math.max(0,Math.floor(s));const d=s/86400|0,h=(s%86400)/3600|0,m=(s%3600)/60|0;return d?d+' д '+h+' ч':h?h+' ч '+m+' мин':m?m+' мин':s+' с'}
 function fm(x){x=Math.floor(x);const a=Math.abs(x);if(a<1e4)return x.toLocaleString('ru-RU')+' ₽';
@@ -297,6 +301,7 @@ function deliver(b){const n=bN(b);if(n<=0)return;accN+=n;
     for(const o of S.board)if(o.p==pi&&o.got<o.need){o.got=Math.min(o.need,o.got+ok);if(o.got>=o.need)toast('📋 Заказ «'+o.n+'» готов — забери награду')}}
   const full=Math.min(raw,S.dm||0);S.dm=(S.dm||0)-full;const sl=Math.min(raw-full,S.ds||0);S.ds=(S.ds||0)-sl;
   const g=full+sl*BAL.sale+(raw-full-sl)*BAL.bulkSale; // сверх спроса — распродажа, дальше оптовику почти даром
+  if(S.loc>=MP_LV){S.star=(S.star||4.5)+(starT()-(S.star||4.5))*Math.min(1,.002*n)} // отзывы покупателей тянут рейтинг к уровню брака
   if(full<raw-1e-9)S.over=(S.over||0)+1;earn(g);sound('coin');VIS.cash+=g;const o=S.order;
   if(o){o.got+=n;if(o.got>=o.need){earn(o.bonus,1);S.gems+=1;toast('🏆 Заказ «'+o.n+'» выполнен! Бонус +'+fm(o.bonus)+' и 💎 1');S.order=null}}}
 // ---------- люди-агенты: всё, что видно на экране, и есть расчёт ----------
@@ -375,7 +380,7 @@ function supply(){const p=P(),need=p.g*S.pr.length*2;if(S.pl>=need)return;
   const price=plPrice()*1.1;let kg=Math.ceil((need*2-S.pl)/1000);kg=Math.min(kg,Math.floor(S.money/price));if(kg>0){spend(kg*price,'p');S.pl+=kg*1000}}
 function tick(dt){
   {const D=demand();S.dm=Math.min((S.dm||0)+D*dt,D*120);S.ds=Math.min((S.ds||0)+D*dt,D*120)}
-  for(let i=S.board.length-1;i>=0;i--){const b=S.board[i];if(b.got<b.need&&(b.left-=dt)<=0)S.board.splice(i,1)} // клиент не дождался — уходит к другим
+  for(let i=S.board.length-1;i>=0;i--){const b=S.board[i];if(b.got<b.need&&(b.left-=dt)<=0){S.board.splice(i,1);if(S.loc>=MP_LV){S.star=Math.max(1,(S.star||4.5)-.15);toast('⭐ Заказ «'+b.n+'» сорван — рейтинг магазина −0,15')}}} // клиент не дождался — уходит к другим
   if(S.board.length<3)fillBoard();
   if(!S.dq||(S.gt%5)<dt)dqCheck();
   for(const k in S.bf)if(S.bf[k]>0)S.bf[k]-=dt;for(const k in S.gcd)if(S.gcd[k]>0)S.gcd[k]-=dt; // бонусы и откаты мини-игр
@@ -411,6 +416,7 @@ function tick(dt){
 }
 function moved(){const to=S.build.to;S.build=null;S.loc=to;S.impB=S.imp;sound('coin');
   toast('🚚 Переехали: '+LOC[to].n+'. Мест под принтеры: '+LOC[to].max);
+  if(to===MP_LV&&typeof modal==='function')modal('🛍 Маркетплейсы','Теперь продаёшь через маркетплейсы — спрос больше, но у магазина есть рейтинг ★.<br><br>Брак тянет рейтинг вниз, сорванные заказы с доски — тоже. Чем выше рейтинг, тем больше спрос. Калибровка снижает брак — вкладка «Рост».');
   if(to===OTK_LV){const r=S.team.otk;r.pl=Math.max(r.pl,1);r.n=Math.max(r.n,1); // без контролёра ОТК встанет сразу
     if(typeof modal==='function')modal('🔍 Открыт участок ОТК','Теперь каждая деталь проходит контроль: брак ловим до клиента, возвратов больше нет.<br><br>Первый контролёр уже в штате. Следи за очередью ОТК во вкладке «Участки» и нанимай ещё людей во вкладке «Люди», иначе ОТК забьётся и доставка встанет.')}
   if(typeof render==='function')render()}
@@ -467,6 +473,7 @@ const skipCost=()=>S.build?Math.max(1,Math.ceil((S.build.end-Date.now())/60000/B
 // старые сохранения: v6 и v7 совместимы по изделиям; более ранние — другая экономика, их не тянем
 const OLDC=[40000,800000,12e6,1.8e9,110e9,110e9],NEWC=[20000,250000,2.5e6,20e6,200e6,200e6]; // цены следующего переезда до/после перехода на рубли
 const MIG={6:s=>{s.ag={op:[],pack:[],ship:[]};return s},7:s=>s,
+  12:s=>{s.star=4.5;s.seen={};if((s.made||0)>=80||s.loc>0)for(const k of ['shop','board','chain','team','boost','clients','grow','games','dq'])s.seen[k]=1;return s},
   11:s=>{const o=s.rk||[];s.rk=[];o.forEach((v,r)=>{s.rk[2*r]=v;s.rk[2*r+1]=v});return s}, // задания стеллажей → задания полок
   10:s=>{const pi=s.prod||0;s.qb={};for(const k of ['otk','pack','ship'])s.qb[k]=s.q&&s.q[k]?{[pi]:s.q[k]}:{};
     if(s.ag)for(const k of ['op','pack','ship'])for(const a of s.ag[k]||[])a.b=a.c?{[pi]:a.c}:{};s.rk=[];s.mp={};return s},
@@ -524,6 +531,7 @@ function hintText(){const f=[...stages()].reverse().find(k=>S.q[k]>=qcap(k)-.01)
     if(!r.pl&&S.money>=plcost('pack'))return'👉 Купи рабочее место упаковщику во вкладке «Люди»';
     if(r.pl&&S.money>=hcost('pack'))return'👉 Найми упаковщика во вкладке «Люди» — он пакует сам'}
   if(S.made<400&&S.pr.length<maxPr()&&S.money>=pcost(0))return'👉 Купи ещё принтер во вкладке «Магазин»';
+  if(S.loc>=MP_LV&&(S.star||4.5)<3.5)return'⭐ Рейтинг магазина '+(S.star||4.5).toFixed(1).replace('.',',')+' — покупатели недовольны браком. Калибровка во вкладке «Рост» поднимет его';
   if(night()&&!S.ns&&staffW()>0)return'🌙 Ночь — люди дома до 6:00. Ночная смена — во вкладке «Люди»';
   if((S.dm||0)<demand()*5&&S.made>50)return'📉 Рынок насыщен — излишки уходят за 25%. Вложись в «Маркетинг» во вкладке «Рост»';
   if(S.made<5)return'👉 Тапай принтер — печать идёт быстрее';
@@ -549,6 +557,12 @@ function modal(h,b,btns){if($('mod').innerHTML){MQ.push([h,b,btns]);return}MB=bt
   MB.map((x,i)=>'<button class="btn'+(x.sec?' sec':'')+'" data-a="mb" data-i="'+i+'">'+x.t+'</button>').join('')+'</div></div></div>'}
 let tab='farm',sig='';
 const TABS=[['farm','🖨','Цех'],['chain','🔗','Участки'],['shop','🛒','Магазин'],['team','👥','Люди'],['grow','📈','Рост']];
+// новичку системы открываются по одной (урок Idle Police: «всё сразу — непонятно»); открытое не закрывается
+const GATE={shop:['🛒 Магазин',()=>S.made>=5||S.pr.length>1],board:['📋 Заказы',()=>S.made>=15],chain:['🔗 Участки',()=>S.made>=12||tm('pack')],
+  team:['👥 Люди',()=>S.made>=20],boost:['📣 Реклама',()=>S.made>=25],clients:['🤝 Крупные клиенты',()=>S.made>=30],grow:['📈 Рост',()=>S.made>=40||S.loc>0],
+  games:['🎮 Мини-игры',()=>S.made>=60||S.loc>0],dq:['📅 Задания дня',()=>S.made>=80||S.loc>0]};
+const opn=k=>!!(S.seen&&S.seen[k]); // система уже открыта
+function gates(){let nw=0;for(const k in GATE)if(!opn(k)&&GATE[k][1]()){S.seen=S.seen||{};S.seen[k]=1;nw=1;toast('✨ Открыто: '+GATE[k][0])}if(nw)render()}
 const TRN={op:'Обучить: шаг +10%, тележка +1',pack:'Обучить: шаг +10%, тележка +1',ship:'Обучить: фургон +4 места',otk:'Обучить +30%'};
 const lockTxt=lv=>'<span class="tag">🔒 '+LOC[lv].n+'</span>';
 const U={ // живые подписи, обновляются 10 раз в секунду
@@ -561,6 +575,7 @@ const U={ // живые подписи, обновляются 10 раз в се
   sr:k=>S.team[k].n?fn(sr(k)*60)+' шт/мин':'вручную',
   rate:()=>fn(prodRate()*60)+' шт/мин',
   rej:()=>fn(S.rej),
+  star:()=>'★'+(S.star||4.5).toFixed(1).replace('.',',')+' → тянется к ★'+starT().toFixed(1).replace('.',',')+' · спрос ×'+starM().toFixed(2).replace('.',','),
   dq:()=>{if(!S.dq)return'';const r=S.dq.q.map((x,i)=>{const got=dqGot(x),ok=got>=x.need;return '<div class="task"><div class="grow">'+(x.cl?'✅ ':ok?'🎯 ':'▫️ ')+DQ[x.k][0]+' '+fn(x.need)+
     '<div class="sub">'+(x.cl?'получено':'<span data-u="dqp:'+i+'"></span>')+'</div></div>'+(x.cl?'':'<button class="btn'+(ok?'':' sec')+'" data-a="dqc" data-i="'+i+'"'+(ok?'':' disabled')+'>Забрать</button>')+'</div>'}).join('');
     return r+'<div class="sub" style="margin-top:6px">'+(S.dq.all?'🏆 Все три выполнены — 💎 10 получены':'Все три за день — ещё 💎 10. Новые задания — завтра')+'</div>'},
@@ -616,18 +631,19 @@ function view(){
   if(tab==='farm'){let h=`
   <div class="card"><div class="row"><div class="grow"><h3>Принтеры <span data-u="cnt"></span></h3><div class="sub">печатаем «${p.n}» · <span data-u="rate"></span></div></div>
    <button class="btn" data-a="clrall" data-u="done"></button></div>
-   <button class="btn sec" style="width:100%;margin-top:8px" data-a="boost" data-u="boost"></button>
+   ${opn('boost')?'<button class="btn sec" style="width:100%;margin-top:8px" data-a="boost" data-u="boost"></button>':''}
    <div class="row" style="margin-top:8px"><div class="grow"><b data-u="pl"></b><div class="sub" data-u="plt"></div></div>
    <button class="btn sec" data-a="spool" data-i="1" data-c="${plPrice()}">1 кг · ${fm(plPrice())}</button>
    <button class="btn sec" data-a="spool" data-i="10" data-c="${plPrice()*8.7}">10 кг · ${fm(plPrice()*8.7)}</button></div></div>
-   <h3>📅 Задания дня</h3><div class="card" data-u="dq"></div>
-   <h3>🎮 Мини-игры <span class="sub">— 20 секунд, за бонус</span></h3><div class="card"><div class="row" style="flex-wrap:wrap;gap:6px">
+   ${S.loc>=MP_LV?'<div class="card row"><div class="grow"><b>⭐ Рейтинг магазина <span data-u="star"></span></b><div class="sub">Маркетплейс: рейтинг тянется к уровню брака (калибровка поднимает), сорванный заказ −0,15. От рейтинга зависит спрос.</div></div></div>':''}
+   ${opn('dq')?'<h3>📅 Задания дня</h3><div class="card" data-u="dq"></div>':''}
+   ${opn('games')?`<h3>🎮 Мини-игры <span class="sub">— 20 секунд, за бонус</span></h3><div class="card"><div class="row" style="flex-wrap:wrap;gap:6px">
     <button class="btn sec" data-a="game" data-i="cal" data-u="gm:cal"></button><button class="btn sec" data-a="game" data-i="knot" data-u="gm:knot"></button><button class="btn sec" data-a="game" data-i="box" data-u="gm:box"></button></div>
-    <div class="sub" style="margin-top:6px" data-u="bf"></div></div>
-   <h3>📋 Заказы <span class="sub">— печатай нужное изделие, детали пойдут в заказ</span></h3>`+
-   S.board.map((_,i)=>`<div class="card" data-u="bo:${i}"></div>`).join('')+`
-   <h3>🤝 Крупные клиенты <span class="sub">— ${LOC[S.loc+1]?'2 из 3 открывают переезд':'постоянная прибавка к цене'}</span></h3>`+
-   CL[S.loc].map((c,i)=>`<div class="card"><div class="row"><div class="grow"><b>${c.n}</b><div class="sub">${c.d} · награда ${fm(c.r[0])}, +${Math.round(c.r[1]*100)}% к цене навсегда, 💎 ${c.r[2]}</div></div><div data-u="cd:${i}"></div></div>
+    <div class="sub" style="margin-top:6px" data-u="bf"></div></div>`:''}
+   ${opn('board')?'<h3>📋 Заказы <span class="sub">— печатай нужное изделие, детали пойдут в заказ</span></h3>':''}`+
+   (opn('board')?S.board.map((_,i)=>`<div class="card" data-u="bo:${i}"></div>`).join(''):'')+`
+   <h3 style="${opn('clients')?'':'display:none'}">🤝 Крупные клиенты <span class="sub">— ${LOC[S.loc+1]?'2 из 3 открывают переезд':'постоянная прибавка к цене'}</span></h3>`+
+   (opn('clients')?CL[S.loc]:[]).map((c,i)=>`<div class="card"><div class="row"><div class="grow"><b>${c.n}</b><div class="sub">${c.d} · награда ${fm(c.r[0])}, +${Math.round(c.r[1]*100)}% к цене навсегда, 💎 ${c.r[2]}</div></div><div data-u="cd:${i}"></div></div>
      ${cst(i).done?'':c.t.map((_,j)=>`<div class="task" data-u="ct:${i}.${j}"></div>`).join('')}</div>`).join('');
    h+=rackCard();
    {const vr=Lc().th>=2?18:12;if(S.racks>vr)h+=`<div class="sub" style="margin:-4px 0 10px">На картинке ${vr} стеллажей из ${S.racks} — остальные работают за кадром.</div>`}
@@ -666,9 +682,9 @@ function view(){
 }
 function render(){
   $('v').innerHTML=view();$('scene').style.display=tab==='farm'?'block':'none';
-  $('nav').innerHTML=TABS.map(t=>`<button data-a="tab" data-i="${t[0]}" class="${t[0]===tab?'on':''}"><b>${t[1]}</b>${t[2]}</button>`).join('');
+  $('nav').innerHTML=TABS.filter(t=>t[0]==='farm'||opn(t[0])).map(t=>`<button data-a="tab" data-i="${t[0]}" class="${t[0]===tab?'on':''}"><b>${t[1]}</b>${t[2]}</button>`).join('');
   sig='';upd()}
-function upd(){backBtn();
+function upd(){backBtn();gates();
   $('m').textContent=fm(S.money);
   {const n=S.rate-S.exp;$('hs').textContent='≈ '+(n<0?'−'+fm(-n):fm(n))+'/с чистыми · '+P().n}
   $('loc').textContent=Lc().n;
@@ -710,7 +726,7 @@ const A={
     modal('🤝 '+c.n+' — постоянный клиент','Награда: <b>'+fm(c.r[0])+'</b>, 💎 '+c.r[2]+' и <b>+'+Math.round(c.r[1]*100)+'% к цене всех изделий навсегда</b>.'+(clDone(S.loc)===2&&LOC[S.loc+1]?'<br><br>Можно переезжать — вкладка «Рост».':''))},
   offer:i=>{const o=S.offer;S.offer=null;if(!o||+i!==1)return;if(o.kind==='order')S.order={n:o.n,need:o.need,got:0,left:120,bonus:o.bonus};
     else if(S.money>=o.c){spend(o.c,'p');S.pl+=1e4;toast('🧵 +10 кг пластика')}else toast('Не хватает денег')},
-  bclaim:i=>{const b=S.board[+i];if(!b||b.got<b.need)return;earn(b.bonus,1);S.gems+=b.gem;S.board.splice(+i,1);fillBoard();sound('coin');toast('📋 Заказ «'+b.n+'» сдан: +'+fm(b.bonus)+(b.gem?' и 💎 1':''))},
+  bclaim:i=>{const b=S.board[+i];if(!b||b.got<b.need)return;if(S.loc>=MP_LV)S.star=Math.min(5,(S.star||4.5)+.05);earn(b.bonus,1);S.gems+=b.gem;S.board.splice(+i,1);fillBoard();sound('coin');toast('📋 Заказ «'+b.n+'» сдан: +'+fm(b.bonus)+(b.gem?' и 💎 1':''))},
   bprod:i=>{const b=S.board[+i];if(b&&S.unl[b.p]){S.prod=b.p;toast('🖨 Печатаем «'+PR[b.p].n+'»')}},
   imp:()=>{const n=impN(),c=impC();if(n<4&&S.money>=c){spend(c);S.imp++;sound('coin');toast('🔨 '+IMP[S.loc][n]+': +'+Math.round(IMP_B*100)+'% к цене навсегда')}},
   ns:()=>{S.ns=S.ns?0:1;toast(S.ns?'🌙 Ночная смена включена: ночью все работают, ночные часы ×2 к зарплате':'🌙 Ночная смена выключена: ночью люди дома')},
