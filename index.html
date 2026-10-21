@@ -2,7 +2,7 @@
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Printls Tycoon</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://telegram.org/js/telegram-web-app.js" async onload="window.tgInit&&tgInit()"></script>
 <style>
 :root{--bg:#0f131b;--card:#181f2c;--card2:#222b3c;--tx:#e8edf5;--mu:#8b97ab;--ac:#ff8a1f;--ok:#2ecc71;--bad:#ff4d5e;--run:#3aa0ff;--warn:#ffc53d}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -48,7 +48,7 @@ h3{margin:0 0 6px;font-size:15px}
 .out{border:1px solid var(--warn)}
 .arrow{text-align:center;color:var(--mu);margin:-4px 0 6px}
 .sel{box-shadow:inset 0 0 0 2px var(--ac)}
-#scene{position:relative;width:100%;height:min(58vh,520px);border-radius:14px;overflow:hidden;background:#0b0f16;margin-bottom:10px;touch-action:none}
+#scene{position:relative;width:100%;height:min(calc(var(--tg-viewport-stable-height,100vh)*.58),520px);border-radius:14px;overflow:hidden;background:#0b0f16;margin-bottom:10px;touch-action:none}
 #scene canvas{display:block;touch-action:none}
 #scene .hint{position:absolute;left:8px;bottom:6px;font-size:11px;color:#fff9;pointer-events:none}
 #scene .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mu);text-align:center;padding:20px}
@@ -480,13 +480,25 @@ function load(){try{let j=JSON.parse(localStorage.getItem(KEY));
   if(j&&j.pr){hadLocal=true;return upgrade(j)}}catch(e){}return fresh()}
 function save(){S.last=Date.now();S.ver=VER;const j=JSON.stringify(S);try{localStorage.setItem(KEY,j)}catch(e){}cloudSave(j)}
 // облако Telegram: значение до 4096 символов — режем на куски
-const TG=window.Telegram&&Telegram.WebApp&&Telegram.WebApp.initData?Telegram.WebApp:null;let cloudT=0;
+let TG=null,cloudT=0;
+// Telegram: скрипт грузится асинхронно — игра не ждёт telegram.org. Когда догрузился: цвета, «Назад», облако
+function tgInit(){const W=window.Telegram&&Telegram.WebApp;if(TG||!W||!W.initData)return;TG=W;
+  try{TG.ready();TG.expand();TG.disableVerticalSwipes&&TG.disableVerticalSwipes();TG.setHeaderColor&&TG.setHeaderColor('#0f131b');TG.setBackgroundColor&&TG.setBackgroundColor('#0f131b');
+    TG.setBottomBarColor&&TG.setBottomBarColor('#141a25');TG.BackButton.onClick(goBack)}catch(e){}
+  if(typeof S!=='undefined'&&S)cloudLoad()}
+// системная «Назад» Telegram: закрывает мини-игру или окно, потом возвращает на «Цех»; на «Цехе» — не нужна
+function goBack(){const g=document.getElementById('mg');if(g){clearInterval(g._t);g.remove();return}
+  if($('mod').innerHTML){$('mod').innerHTML='';if(MQ.length)modal(...MQ.shift());return}if(tab!=='farm'){tab='farm';render()}}
+function backBtn(){if(!TG||!TG.BackButton)return;const need=!!document.getElementById('mg')||!!$('mod').innerHTML||tab!=='farm';
+  if(need!==backBtn.v){backBtn.v=need;try{need?TG.BackButton.show():TG.BackButton.hide()}catch(e){}}}
 // облако: куски по 4000 символов + заголовок «кусков|длина|хеш»; заголовок пишем последним, читаем — сверяем
 const hsh=t=>{let h=5381;for(let i=0;i<t.length;i++)h=(h*33+t.charCodeAt(i))|0;return h>>>0};
-function cloudSave(j){if(!TG||!TG.CloudStorage||Date.now()-cloudT<15000)return;cloudT=Date.now();const n=Math.ceil(j.length/4000);
-  try{for(let i=0;i<n;i++)TG.CloudStorage.setItem('c'+VER+'_'+i,j.slice(i*4000,(i+1)*4000));TG.CloudStorage.setItem('c'+VER+'h',n+'|'+j.length+'|'+hsh(j))}catch(e){}}
-function cloudLoad(){if(!TG||!TG.CloudStorage)return;try{TG.CloudStorage.getItem('c'+VER+'h',(e,h)=>{if(e||!h)return;const [n,len,hs]=h.split('|').map(Number);if(!n)return;
-  const ks=[...Array(n)].map((_,i)=>'c'+VER+'_'+i);
+function cloudSave(j,now){if(!TG||!TG.CloudStorage||!now&&Date.now()-cloudT<15000)return;cloudT=Date.now();const n=Math.ceil(j.length/4000);
+  try{for(let i=0;i<n;i++)TG.CloudStorage.setItem('cs_'+i,j.slice(i*4000,(i+1)*4000));TG.CloudStorage.setItem('csh',n+'|'+j.length+'|'+hsh(j))}catch(e){}}
+function cloudLoad(pre){if(!TG||!TG.CloudStorage)return;const keys=pre?[pre+'h',i=>pre+'_'+i]:['csh',i=>'cs_'+i];
+  try{TG.CloudStorage.getItem(keys[0],(e,h)=>{if(e||!h){const old=['c12','c11','c10','c9','c8'],k=old.indexOf(pre);if(k<old.length-1)cloudLoad(old[k+1]);return} // нет — ищем копию прошлых версий
+  const [n,len,hs]=h.split('|').map(Number);if(!n)return;
+  const ks=[...Array(n)].map((_,i)=>keys[1](i));
   TG.CloudStorage.getItems(ks,(e2,v)=>{if(e2||!v)return;const t=ks.map(k=>v[k]||'').join('');if(t.length!==len||hsh(t)!==hs)return; // кусок не дописался — не трогаем
     try{const j=JSON.parse(t);if(j&&j.pr&&(!hadLocal||j.last>S.last)){S=upgrade(j);hadLocal=true;render();offline()}}catch(x){}})})}catch(e){}}
 const haptic=t=>{try{TG&&TG.HapticFeedback.impactOccurred(t||'light')}catch(e){}};
@@ -649,14 +661,14 @@ function view(){
     (S.build?'<div style="margin-top:8px" data-u="bld"></div>':nl?`<div class="row" style="margin-top:8px"><div class="grow sub">Переезд: ${nl.n} — до ${nl.max} принтеров${S.loc+1===OTK_LV?', открывается ОТК':''}. Стройка ${dur(BAL.bt[S.loc+1])}.<br>${clDone(S.loc)>=2?'✅ клиенты довольны':'🤝 нужно 2 крупных клиента из 3, сейчас '+clDone(S.loc)}</div><button class="btn" data-a="loc" data-c="${nl.c}" ${clDone(S.loc)>=2?'':'disabled data-lock'}>${fm(nl.c)}</button></div>`:'<div class="sub ok" style="margin-top:6px">Ты на вершине. Дальше — только продажа бизнеса.</div>')+'</div>';
    if(S.loc>=5)h+=`<h3 style="margin-top:14px">Продать бизнес</h3><div class="card"><div class="sub">Всё обнулится, а репутация ⭐ останется: каждая звезда +10% к доходу навсегда. Сейчас ⭐ ${S.rep}.</div>
     <div class="row" style="margin-top:8px"><div class="grow sub">${prestGain()?'Получишь ⭐ '+prestGain():'Нужно заработать за круг 1 млрд ₽'}</div><button class="btn" data-a="prest" ${prestGain()?'':'disabled'}>Продать</button></div></div>`;
-   h+=`<div class="card sub">Заработано за всё время: ${fm(S.all)} · сделано деталей: ${fn(S.made)} · в игре ${dur((Date.now()-S.t0)/1000)}<div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn sec" data-a="snd">${S.snd?'🔊 Звук вкл':'🔇 Звук выкл'}</button><button class="btn sec" data-a="eco">${S.eco?'🪫 Графика: экономная':'✨ Графика: полная'}</button><button class="btn sec" data-a="reset">Начать с нуля</button></div></div>`;
+   h+=`<div class="sub" style="text-align:center;margin:4px 0 10px">Printls Tycoon · от команды Printls3D</div><div class="card sub">Заработано за всё время: ${fm(S.all)} · сделано деталей: ${fn(S.made)} · в игре ${dur((Date.now()-S.t0)/1000)}<div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn sec" data-a="snd">${S.snd?'🔊 Звук вкл':'🔇 Звук выкл'}</button><button class="btn sec" data-a="eco">${S.eco?'🪫 Графика: экономная':'✨ Графика: полная'}</button><button class="btn sec" data-a="reset">Начать с нуля</button></div></div>`;
    return h}
 }
 function render(){
   $('v').innerHTML=view();$('scene').style.display=tab==='farm'?'block':'none';
   $('nav').innerHTML=TABS.map(t=>`<button data-a="tab" data-i="${t[0]}" class="${t[0]===tab?'on':''}"><b>${t[1]}</b>${t[2]}</button>`).join('');
   sig='';upd()}
-function upd(){
+function upd(){backBtn();
   $('m').textContent=fm(S.money);
   {const n=S.rate-S.exp;$('hs').textContent='≈ '+(n<0?'−'+fm(-n):fm(n))+'/с чистыми · '+P().n}
   $('loc').textContent=Lc().n;
@@ -717,7 +729,7 @@ const LIGHT=new Set(['p','clrall','st','spool','mb','offer','boost','skip','bpro
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b||b.disabled||b.tagName==='SELECT')return;const a=b.dataset.a;
   const m0=S.money;A[a](b.dataset.i);sound('tap');haptic();if(S.money-m0>.5)pop(e.clientX,e.clientY,'+'+fm(S.money-m0));if(a==='ctask'||a==='offer'||a==='bclaim'||!LIGHT.has(a)||S.pr.length+':'+S.prod!==sig&&a==='mb')render();else upd();save()});
 document.addEventListener('change',e=>{const el=e.target.closest('select[data-a]');if(!el)return;A[el.dataset.a](el.value,el);upd();save()});
-document.addEventListener('visibilitychange',()=>{if(document.hidden)save()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){save();cloudSave(JSON.stringify(S),1)}}); // свернули — сразу и в облако
 // стеллажи: у каждого своё изделие (или основное)
 function rackCard(){const opts=PR.map((x,i)=>S.unl[i]?i:-1).filter(i=>i>=0);if(opts.length<2)return'';
   const n=Math.ceil(Math.min(S.racks*6,Lc().max)/3);
@@ -749,13 +761,13 @@ const VIS={ship:0,cash:0};
 const TH=()=>Lc().th; // оформление 3D-сцены по площадке
 
 // ---------- запуск ----------
-S=load();if(TG){TG.ready();TG.expand();try{TG.disableVerticalSwipes&&TG.disableVerticalSwipes()}catch(e){}cloudLoad()}
+S=load();window.tgInit=tgInit;tgInit();
 if(location.hash==='#test'&&location.protocol==='file:'){S=fresh();S.money=5e6;S.gems=40;const L=+(location.search.slice(1)||0);S.loc=L;S.racks=Math.min(4,Math.ceil(LOC[L].max/6));
   for(const k of ['op','pack','ship','otk']){S.team[k]={n:2,pl:3,lv:1,a:0}}S.mg={tech:1};
   for(let i=1;i<Math.min(17,LOC[L].max);i++){const t=Math.min(i%8,7);S.pr.push({t,p:Math.random(),st:['run','run','done','fail','nopl'][i%5],ft:0});S.cnt[t]=(S.cnt[t]||0)+1}
   S.order={n:'Сувениры для выставки',need:120,got:47,left:83,bonus:36000};S.q.pack=7;S.intro=true}
 render();offline();
-if(!S.intro){S.intro=true;modal('🖨 Printls Tycoon','Гараж, один старый Ender-3 и мечта о заводе на 400 принтеров.<br><br>Сначала всё делаешь сам: снимаешь детали, пакуешь, отвозишь. Подсказки — прямо над цехом.',[{t:'Погнали'}])}else daily();
+if(!S.intro){S.intro=true;modal('🖨 Printls Tycoon','<span class="sub">от команды Printls3D</span><br><br>Гараж, один старый Ender-3 и мечта о заводе на 400 принтеров.<br><br>Сначала всё делаешь сам: снимаешь детали, пакуешь, отвозишь. Подсказки — прямо над цехом.',[{t:'Погнали'}])}else daily();
 // Один цикл на кадрах (Fix Your Timestep): копим прошедшее время, логика шагает ровно по 0,1 с,
 // картинка рисует долю ALPHA между прошлым и текущим тактом. Таймеры браузера не участвуют — им на телефоне верить нельзя.
 const STEP=.1;let lacc=0,lastF=performance.now(),updT=0;window.ALPHA=0;
