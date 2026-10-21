@@ -52,7 +52,8 @@ h3{margin:0 0 6px;font-size:15px}
 #scene canvas{display:block;touch-action:none}
 #scene .hint{position:absolute;left:8px;bottom:6px;font-size:11px;color:#fff9;pointer-events:none}
 #scene .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mu);text-align:center;padding:20px}
-#ban .card{margin-bottom:10px}
+#ban{position:absolute;left:8px;right:8px;bottom:22px;z-index:3} /* баннеры поверх сцены: появляются и исчезают, не сдвигая её */
+#ban .card{margin-bottom:6px;padding:8px 10px;font-size:13px;background:#182132ee}
 #scene .tip{position:absolute;left:8px;right:8px;top:8px;background:#ff8a1fee;color:#15100a;font-weight:700;font-size:13px;padding:7px 10px;border-radius:10px;pointer-events:none}
 #scene .tip:empty{display:none}
 .pop{position:fixed;z-index:12;pointer-events:none;font-weight:900;color:#2ecc71;text-shadow:0 1px 3px #000;font-size:16px;transform:translate(-50%,-50%);animation:pop 1s ease-out forwards}
@@ -65,7 +66,7 @@ h3{margin:0 0 6px;font-size:15px}
   <div style="text-align:right"><div id="loc" style="font-weight:700"></div><div class="sub" id="rep"></div></div>
 </div></header>
 <div id="toasts"></div>
-<main><div id="ban"><div class="card out" data-u="out"></div><div class="card ord" data-u="ord"></div><div class="card offer" data-u="offer"></div></div><div id="scene"><div class="tip" id="hint"></div><div class="msg" id="smsg">Загружаю 3D-цех…</div><div class="hint">тяни — двигать · щипок — масштаб</div></div><div id="v"></div></main>
+<main><div id="scene"><div class="tip" id="hint"></div><div id="ban"><div class="card out" data-u="out"></div><div class="card ord" data-u="ord"></div><div class="card offer" data-u="offer"></div></div><div class="msg" id="smsg">Загружаю 3D-цех…</div><div class="hint">тяни — двигать · щипок — масштаб</div></div><div id="v"></div></main>
 <nav id="nav"></nav>
 <div id="mod"></div>
 <script>
@@ -176,10 +177,10 @@ const CL=[ // крупные клиенты: 3 задачи → постоянн
   {n:'Космос',d:'кронштейны для спутника',t:[['Скорость печати 30 ур.',()=>S.up.speed||0,30],['Брак 1%',()=>S.up.cal||0,7],['Доход 30 млн ₽/с',()=>S.rate,3e7]],r:[2e10,.2,150]}]];
 const ORD=['Сувениры для выставки','Брелоки для вендинга','Фигурки к Новому году','Партия для автосервиса','Подарки для корпоратива','Мерч для блогера'];
 const FAULT=['Спагетти','Засор хотенда','Отлип стол','Застряла нить в AMS'];
-const KEY='printls_tycoon_v7';
+const KEY='printls_tycoon',VER=8; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
-let S, acc={i:0,w:0,e:0,p:0}, accT=0;
+let S, acc={i:0,w:0,e:0,p:0}, accT=0, accN=0;
 const role=()=>({n:0,pl:0,lv:0,a:0});
 const fresh=(rep=0,all=0,best=0)=>({money:40,gems:0,run:0,all,best,rep,loc:0,racks:1,pr:[{t:0,p:0,st:'run',ft:0}],cnt:[1],prod:0,unl:[true],pl:1500,
   q:{otk:0,pack:0,ship:0},qc:{otk:0,pack:0,ship:0},team:{op:role(),pack:role(),ship:role(),otk:role()},mg:{},up:{},
@@ -265,14 +266,17 @@ function proc(k,n){
   else S.q[nx]+=n;
   return n}
 // фургон уехал с грузом: деньги и заказы; до ОТК часть деталей клиенты возвращают
-function deliver(n){if(n<=0)return;
+function deliver(n){if(n<=0)return;accN+=n;
   {const ok=S.loc>=OTK_LV?n:Math.round(n*(1-defect()));if(S.loc<OTK_LV)S.rej+=n-ok;
     const g=ok*P().p*pm();earn(g);sound('coin');VIS.cash+=g;const o=S.order;
     for(const b of S.board)if(b.p===S.prod&&b.got<b.need){b.got=Math.min(b.need,b.got+ok);if(b.got>=b.need)toast('📋 Заказ «'+b.n+'» готов — забери награду')}
     if(o){o.got+=n;if(o.got>=o.need){earn(o.bonus,1);S.gems+=1;toast('🏆 Заказ «'+o.n+'» выполнен! Бонус +'+fm(o.bonus)+' и 💎 1');S.order=null}}}}
 // ---------- люди-агенты: всё, что видно на экране, и есть расчёт ----------
-function walkTo(a,dt,v){while(a.path.length&&dt>0){const [tx,tz]=a.path[0],d=Math.hypot(tx-a.x,tz-a.z),s=v*dt;
-    if(d<=s){a.x=tx;a.z=tz;a.path.shift();dt-=d/v}else{a.x+=(tx-a.x)/d*s;a.z+=(tz-a.z)/d*s;dt=0}}return !a.path.length}
+// прошлое положение людей и фургонов: картинка рисует между ним и текущим (главный цикл зовёт перед каждым тактом)
+function snap(){for(const a of S.ag.op.concat(S.ag.pack)){a.px=a.x;a.pz=a.z;a.pw=a.path.length>0&&!(a.w>0)}for(const f of S.ag.ship)f.pt=f.st==='road'?f.t:0}
+// идёт по маршруту; вернёт остаток времени, если дошёл, или -1, если ещё в пути
+function walkTo(a,dt,v){while(a.path.length){const [tx,tz]=a.path[0],d=Math.hypot(tx-a.x,tz-a.z);
+    if(d<=v*dt){a.x=tx;a.z=tz;a.path.shift();dt-=d/v}else{const s=v*dt;a.x+=(tx-a.x)/d*s;a.z+=(tz-a.z)/d*s;return -1}}return dt}
 let DONE=[];const AGV=8; // столько людей каждого участка ходит по цеху; остальные — за кадром, с той же выработкой
 const dist=(a,b)=>Math.abs(a[1]-b[1])<.05?Math.abs(a[0]-b[0]):Math.abs(a[0]-.22)+Math.abs(a[1]-b[1])+Math.abs(b[0]-.22);
 function syncAg(){const L=lay();
@@ -280,32 +284,43 @@ function syncAg(){const L=lay();
   fit(S.ag.op,Math.min(AGV,S.team.op.n),()=>({k:'op',x:L.drop[stages()[0]][0],z:L.drop[stages()[0]][1],path:[],tg:[],c:0,w:0,st:'idle'}));
   fit(S.ag.pack,Math.min(AGV,S.team.pack.n),()=>({k:'pack',x:L.sPack[0],z:L.sPack[1],path:[],c:0,w:0,t:0,st:'pack'}));
   fit(S.ag.ship,Math.max(1,Math.min(AGV,S.team.ship.n)),()=>({st:'dock',t:0,c:0,idle:0}))}
-// оператор: выбирает ближайшие готовые принтеры (сколько влезет в тележку), собирает, несёт на первый стол
-function stepOp(a,dt){if(a.w>0){a.w-=dt;return}const f=stages()[0],tb=lay().drop[f],v=vOf('op');
-  if(a.st==='idle'){if(!DONE.length)return;const busy=new Set();for(const b of S.ag.op)for(const i of b.tg)busy.add(i);
-    let cur=[a.x,a.z];const pick=[];
-    for(let n=capOf('op');n>0;n--){let bi=-1,bd=1e9;for(const i of DONE){if(busy.has(i)||pick.includes(i))continue;const d=dist(cur,front(i));if(d<bd){bd=d;bi=i}}
-      if(bi<0)break;pick.push(bi);cur=front(bi)}
-    if(!pick.length)return;a.tg=pick;a.path=route([a.x,a.z],front(pick[0]));a.st='go'}
-  if(!walkTo(a,dt,v))return;
-  if(a.st==='go'){const i=a.tg.shift(),x=S.pr[i];if(x&&x.st==='done'){a.c++;S.made++;restart(x);a.w=BAL.load}
-    if(a.tg.length)a.path=route([a.x,a.z],front(a.tg[0]));else if(a.c){a.path=route([a.x,a.z],tb);a.st='back'}else a.st='idle';return}
-  if(a.st==='back'||a.st==='wait'){const n=Math.min(a.c,Math.floor(qcap(f)-S.q[f]+1e-6));if(n>0){S.q[f]+=n;a.c-=n;a.w=BAL.load*n}
-    a.st=a.c?'wait':'idle'}} // стол забит — стоит с грузом и ждёт: узкое место видно глазами
-// упаковщик: пакует у стола до полной тележки, везёт коробки к фургону
-function stepPack(a,dt){if(a.w>0){a.w-=dt;return}const L=lay(),v=vOf('pack'),c=capOf('pack');
-  if(a.st==='pack'){if(a.c<c&&S.q.pack>=1){a.t+=dt;if(a.t>=BAL.packT){a.t=0;S.q.pack-=1;a.c++}return}
-    if(a.c&&(a.c>=c||S.q.pack<1)){a.path=[L.sDock];a.st='go'}return}
-  if(!walkTo(a,dt,v))return;
-  if(a.st==='go'||a.st==='wait'){const n=Math.min(a.c,Math.floor(qcap('ship')-S.q.ship+1e-6));if(n>0){S.q.ship+=n;a.c-=n;a.w=BAL.load*n}
-    if(a.c)a.st='wait';else{a.path=[L.sPack];a.st='ret'}return}
-  if(a.st==='ret')a.st='pack'}
+// оператор: выбирает ближайшие готовые принтеры (сколько влезет в тележку), собирает, несёт на первый стол.
+// Каждый шаг тратит своё время, остаток такта переходит в следующий шаг — поэтому такт 0,1 и 1 с дают одно и то же.
+function stepOp(a,dt){const f=stages()[0],tb=lay().drop[f],v=vOf('op');
+  for(let g=0;g<40&&dt>1e-9;g++){
+    if(a.w>0){const u=Math.min(a.w,dt);a.w-=u;dt-=u;continue}
+    if(a.st==='idle'){if(!DONE.length)return;const busy=new Set();for(const b of S.ag.op)for(const i of b.tg)busy.add(i);
+      let cur=[a.x,a.z];const pick=[];
+      for(let n=capOf('op');n>0;n--){let bi=-1,bd=1e9;for(const i of DONE){if(busy.has(i)||pick.includes(i)||S.pr[i].st!=='done')continue;const d=dist(cur,front(i));if(d<bd){bd=d;bi=i}}
+        if(bi<0)break;pick.push(bi);cur=front(bi)}
+      if(!pick.length)return;a.tg=pick;a.path=route([a.x,a.z],front(pick[0]));a.st='go'}
+    if(a.path.length){const r=walkTo(a,dt,v);if(r<0)return;dt=r}
+    if(a.st==='go'){const i=a.tg.shift(),x=S.pr[i];if(x&&x.st==='done'){a.c++;S.made++;restart(x);a.w=BAL.load}
+      if(a.tg.length)a.path=route([a.x,a.z],front(a.tg[0]));else if(a.c){a.path=route([a.x,a.z],tb);a.st='back'}else a.st='idle';continue}
+    if(a.st==='back'||a.st==='wait'){const n=Math.min(a.c,Math.floor(qcap(f)-S.q[f]+1e-6));if(n>0){S.q[f]+=n;a.c-=n;a.w=BAL.load*n}
+      if(a.c){a.st='wait';return} // стол забит — стоит с грузом и ждёт: узкое место видно глазами
+      a.st='idle'}}}
+// упаковщик: пакует у стола до полной тележки, несёт коробки к фургону
+function stepPack(a,dt){const L=lay(),v=vOf('pack'),c=capOf('pack');
+  for(let g=0;g<40&&dt>1e-9;g++){
+    if(a.w>0){const u=Math.min(a.w,dt);a.w-=u;dt-=u;continue}
+    if(a.st==='pack'){
+      if(a.c<c&&S.q.pack>=1){const need=BAL.packT-a.t;if(dt>=need){dt-=need;a.t=0;S.q.pack-=1;a.c++;continue}a.t+=dt;return}
+      if(a.c&&(a.c>=c||S.q.pack<1)){a.path=[L.sDock];a.st='go';continue}return}
+    if(a.path.length){const r=walkTo(a,dt,v);if(r<0)return;dt=r}
+    if(a.st==='go'||a.st==='wait'){const n=Math.min(a.c,Math.floor(qcap('ship')-S.q.ship+1e-6));if(n>0){S.q.ship+=n;a.c-=n;a.w=BAL.load*n}
+      if(a.c){a.st='wait';return}a.path=[L.sPack];a.st='ret';continue}
+    if(a.st==='ret')a.st='pack'}}
 // фургон: грузит со склада у ворот, уезжает полным (или если ждать больше нечего), деньги — при отправке
-function depart(f){const n=Math.min(f.c,capOf('ship'));f.c=0;f.st='road';f.t=f.T=road();deliver(n)}
-function stepVan(f,i,dt){if(f.st==='road'){f.t-=dt;if(f.t<=0){f.st='dock';f.t=0}return}
-  if(i>=S.team.ship.n)return; // без курьера фургон стоит, пока игрок не тапнет
-  const c=capOf('ship');if(f.c<c&&S.q.ship>=1){f.t+=dt*(S.broke?.5:1);f.idle=0;if(f.t>=BAL.load){f.t=0;S.q.ship-=1;f.c++}}else f.idle+=dt;
-  if(f.c>=c||f.c>0&&f.idle>3)depart(f)}
+function depart(f){const n=Math.min(f.c,capOf('ship'));f.c=0;f.st='road';f.t=f.T=road();f.idle=0;deliver(n)}
+function stepVan(f,i,dt){const c=capOf('ship'),k=S.broke?.5:1;
+  for(let g=0;g<40&&dt>1e-9;g++){
+    if(f.st==='road'){const u=Math.min(f.t,dt);f.t-=u;dt-=u;if(f.t<=1e-9){f.st='dock';f.t=0}continue}
+    if(i>=S.team.ship.n)return; // без курьера фургон стоит, пока игрок не тапнет
+    if(f.c>=c){depart(f);continue}
+    if(S.q.ship>=1){const need=(BAL.load-f.t)/k;f.idle=0;if(dt>=need){dt-=need;f.t=0;S.q.ship-=1;f.c++;continue}f.t+=dt*k;return}
+    if(f.c>0){const need=3-f.idle;if(dt>=need){dt-=need;depart(f);continue}}
+    f.idle+=dt;return}}
 // люди за кадром: та же выработка на человека, что у видимых, без хождения по сцене
 function offScreen(dt){const f=stages()[0];
   for(const k of ['op','pack','ship']){const r=S.team[k],e=r.n-AGV;if(e<=0){r.a=0;continue}
@@ -334,10 +349,9 @@ function tick(dt){
     if(x.st==='fail'&&(S.mg.ai||S.mg.tech)){x.ft+=dt;if(x.ft>(S.mg.ai?2:8))restart(x)}
   }
   DONE=[];S.pr.forEach((x,i)=>{if(x.st==='done')DONE.push(i)}); // готовые — один проход на такт
-  for(const a of S.ag.op.concat(S.ag.pack)){a.px=a.x;a.pz=a.z}for(const f of S.ag.ship)f.pt=f.st==='road'?f.t:0; // прошлый такт — для плавной картинки
   syncAg();for(const a of S.ag.op)stepOp(a,dt);for(const a of S.ag.pack)stepPack(a,dt);S.ag.ship.forEach((f,i)=>stepVan(f,i,dt));
   offScreen(dt);
-  if(S.loc>=OTK_LV&&S.team.otk.n){const r=S.team.otk;r.a=Math.min(r.a+sr('otk')*dt,5);while(r.a>=1&&proc('otk',1))r.a-=1} // контролёры стоят у стола
+  if(S.loc>=OTK_LV&&S.team.otk.n){const r=S.team.otk;r.a=Math.min(r.a+sr('otk')*dt,5+sr('otk')*dt);while(r.a>=1&&proc('otk',1))r.a-=1} // контролёры стоят у стола
   if(S.mg.sup)supply();
   // расходы: зарплаты и электричество; нечем платить — люди работают вполсилы
   const w=wages()*dt,e=el*elecK()*dt;spend(w,'w');spend(e,'e');
@@ -351,7 +365,7 @@ function tick(dt){
   if(S.order){S.order.left-=dt;if(S.order.left<=0){toast('⏰ Заказ «'+S.order.n+'» сорван — не успели');S.order=null}}
   if(S.build&&Date.now()>=S.build.end)moved();
   S.ev-=dt;if(S.ev<=0){event();S.ev=60+Math.random()*60}
-  accT+=dt;if(accT>=5){const f=(a,b)=>a?a*.6+b/accT*.4:b/accT;S.rate=f(S.rate,acc.i);S.exp=f(S.exp,acc.w+acc.e);
+  accT+=dt;if(accT>=5){const f=(a,b)=>a?a*.6+b/accT*.4:b/accT;S.rate=f(S.rate,acc.i);S.exp=f(S.exp,acc.w+acc.e);S.fw=(S.fw||[]).concat(accN/accT).slice(-24);S.fm=S.fw.reduce((x,y)=>x+y,0)/S.fw.length;accN=0;
     for(const k in acc)S.stat[k]=f(S.stat[k],acc[k]);acc={i:0,w:0,e:0,p:0};accT=0}
   if(S.money>S.best)S.best=S.money;
 }
@@ -375,7 +389,8 @@ function event(){
   }
 }
 // поток без игрока: самое узкое звено цепочки; участок без людей стоит
-const flowOff=()=>Math.min(prodRate(),...['op',...stages()].map(k=>sr(k)));
+// офлайн — по реально замеренному потоку отгрузок (S.fm, шт/с), но не выше теории: что видел, то и получишь
+const flowOff=()=>Math.min(S.fm||0,prodRate(),...['op',...stages()].map(k=>sr(k)*1.5)); // теория с запасом: люди берут ближние принтеры, а она считает средний рейс
 function offline(){
   const max=S.mg.srv?8*3600:6*3600,raw=(Date.now()-S.last)/1000,el=Math.min(max,raw);
   if(raw<60){for(let t=raw;t>0;t-=.1)tick(Math.min(.1,t));return} // короткую паузу досчитываем честно, по тикам
@@ -390,7 +405,7 @@ function offline(){
   if(S.build&&Date.now()>=S.build.end)moved();
 }
 function daily(){
-  const day=new Date().toISOString().slice(0,10);if(S.daily&&S.daily.day===day)return;
+  const d0=new Date(),day=d0.getFullYear()+'-'+String(d0.getMonth()+1).padStart(2,'0')+'-'+String(d0.getDate()).padStart(2,'0');if(S.daily&&S.daily.day===day)return;
   if(!S.made)return; // первая награда — когда уже что-то сделал
   const s=S.daily&&Date.parse(day)-Date.parse(S.daily.day)===864e5?S.daily.s+1:1;S.daily={day,s};
   const g=Math.max(100,S.rate*600)*Math.min(s,7);earn(g,1);S.gems+=5*Math.min(s,7);
@@ -400,14 +415,25 @@ const skipCost=()=>S.build?Math.max(1,Math.ceil((S.build.end-Date.now())/60000/B
 // ==/LOGIC==
 
 // ---------- сохранение ----------
-function load(){try{const j=JSON.parse(localStorage.getItem(KEY));if(j&&j.pr)return Object.assign(fresh(),j)}catch(e){}return fresh()}
-function save(){S.last=Date.now();const j=JSON.stringify(S);try{localStorage.setItem(KEY,j)}catch(e){}cloudSave(j)}
+// старые сохранения: v6 и v7 совместимы по изделиям; более ранние — другая экономика, их не тянем
+const MIG={6:s=>{s.ag={op:[],pack:[],ship:[]};return s},7:s=>s};
+function merge(b,j){for(const k in j){const v=j[k];if(v&&typeof v==='object'&&!Array.isArray(v)&&b[k]&&typeof b[k]==='object'&&!Array.isArray(b[k]))merge(b[k],v);else b[k]=v}return b}
+function upgrade(j){let v=j.ver||0;while(v<VER&&MIG[v]){j=MIG[v](j);v++}j.ver=VER;return merge(fresh(),j)}
+let hadLocal=false;
+function load(){try{let j=JSON.parse(localStorage.getItem(KEY));
+  if(!j)for(const v of [7,6]){const o=JSON.parse(localStorage.getItem('printls_tycoon_v'+v)||'null');if(o&&o.pr){o.ver=v;j=o;break}}
+  if(j&&j.pr){hadLocal=true;return upgrade(j)}}catch(e){}return fresh()}
+function save(){S.last=Date.now();S.ver=VER;const j=JSON.stringify(S);try{localStorage.setItem(KEY,j)}catch(e){}cloudSave(j)}
 // облако Telegram: значение до 4096 символов — режем на куски
 const TG=window.Telegram&&Telegram.WebApp&&Telegram.WebApp.initData?Telegram.WebApp:null;let cloudT=0;
-function cloudSave(j){if(!TG||!TG.CloudStorage||Date.now()-cloudT<15000)return;cloudT=Date.now();const n=Math.ceil(j.length/4000),o={svn:String(n)};
-  for(let i=0;i<n;i++)o['sv'+i]=j.slice(i*4000,(i+1)*4000);try{for(const k in o)TG.CloudStorage.setItem(k,o[k])}catch(e){}}
-function cloudLoad(){if(!TG||!TG.CloudStorage)return;try{TG.CloudStorage.getItem('svn',(e,n)=>{n=+n;if(e||!n)return;const ks=[...Array(n)].map((_,i)=>'sv'+i);
-  TG.CloudStorage.getItems(ks,(e2,v)=>{if(e2||!v)return;try{const j=JSON.parse(ks.map(k=>v[k]||'').join(''));if(j&&j.pr&&j.last>S.last){S=Object.assign(fresh(),j);render();offline()}}catch(x){}})})}catch(e){}}
+// облако: куски по 4000 символов + заголовок «кусков|длина|хеш»; заголовок пишем последним, читаем — сверяем
+const hsh=t=>{let h=5381;for(let i=0;i<t.length;i++)h=(h*33+t.charCodeAt(i))|0;return h>>>0};
+function cloudSave(j){if(!TG||!TG.CloudStorage||Date.now()-cloudT<15000)return;cloudT=Date.now();const n=Math.ceil(j.length/4000);
+  try{for(let i=0;i<n;i++)TG.CloudStorage.setItem('c'+VER+'_'+i,j.slice(i*4000,(i+1)*4000));TG.CloudStorage.setItem('c'+VER+'h',n+'|'+j.length+'|'+hsh(j))}catch(e){}}
+function cloudLoad(){if(!TG||!TG.CloudStorage)return;try{TG.CloudStorage.getItem('c'+VER+'h',(e,h)=>{if(e||!h)return;const [n,len,hs]=h.split('|').map(Number);if(!n)return;
+  const ks=[...Array(n)].map((_,i)=>'c'+VER+'_'+i);
+  TG.CloudStorage.getItems(ks,(e2,v)=>{if(e2||!v)return;const t=ks.map(k=>v[k]||'').join('');if(t.length!==len||hsh(t)!==hs)return; // кусок не дописался — не трогаем
+    try{const j=JSON.parse(t);if(j&&j.pr&&(!hadLocal||j.last>S.last)){S=upgrade(j);hadLocal=true;render();offline()}}catch(x){}})})}catch(e){}}
 const haptic=t=>{try{TG&&TG.HapticFeedback.impactOccurred(t||'light')}catch(e){}};
 
 // ---------- звук и мелочи ----------
@@ -469,25 +495,29 @@ const U={ // живые подписи, обновляются 10 раз в се
   van:()=>{const a=S.ag.ship,r=a.filter(v=>v.st==='road');return r.length?'🚚 в рейсе '+r.length+' из '+a.length+(r.length===a.length?' · вернётся через '+Math.ceil(Math.min(...r.map(v=>v.t)))+' с':''):'🚚 у ворот'},
   ord:()=>{const o=S.order;if(!o)return'';return '📦 <b>'+o.n+'</b>: '+fn(o.got)+' / '+fn(o.need)+' шт · осталось '+Math.ceil(o.left)+' с · бонус '+fm(o.bonus)+
     '<div class="bar"><i style="width:'+Math.min(100,o.got/o.need*100)+'%"></i></div>'},
-  offer:()=>{const o=S.offer;if(!o)return'';const t=' <span class="sub">'+Math.ceil(o.left)+' с</span>';
+  offt:()=>S.offer?Math.ceil(S.offer.left)+' с':'',
+  offer:()=>{const o=S.offer;if(!o)return'';const t=' <span class="sub" data-u="offt"></span>';
     return o.kind==='order'?'📦 <b>Заказ «'+o.n+'»</b>: '+fn(o.need)+' шт «'+P().n+'» за 2 мин, бонус '+fm(o.bonus)+' и 💎 5'+t+'<div class="row" style="margin-top:6px;justify-content:flex-end"><button class="btn sec" data-a="offer" data-i="0">Нет</button><button class="btn" data-a="offer" data-i="1">Берём</button></div>'
      :'🧵 <b>Скидка −40%</b>: 10 кг '+P().m+' за '+fm(o.c)+t+'<div class="row" style="margin-top:6px;justify-content:flex-end"><button class="btn sec" data-a="offer" data-i="0">Нет</button><button class="btn" data-a="offer" data-i="1">Беру</button></div>'},
   out:()=>S.out>0&&!S.up.ups?'⚡ Нет света: печать стоит ещё '+Math.ceil(S.out)+' с':'',
   ct:(s)=>{const[i,j]=s.split('.').map(Number),c=CL[S.loc][i],[n,f,g]=c.t[j],st=cst(i),ok=f()>=g,got=st.t[j];
-    return '<div class="grow">'+(got?'✅ ':ok?'🎯 ':'▫️ ')+n+'<div class="sub">'+(got?'выполнено':fn(Math.min(f(),g))+' / '+fn(g))+'</div></div>'+
+    return '<div class="grow">'+(got?'✅ ':ok?'🎯 ':'▫️ ')+n+'<div class="sub">'+(got?'выполнено':'<span data-u="ctp:'+s+'"></span>')+'</div></div>'+
     (got?'':'<button class="btn'+(ok?'':' sec')+'" data-a="ctask" data-i="'+s+'"'+(ok?'':' disabled')+'>💎 10</button>')},
+  ctp:s=>{const[i,j]=s.split('.').map(Number),[,f,g]=CL[S.loc][i].t[j];return fn(Math.min(f(),g))+' / '+fn(g)},
   cd:i=>{const c=CL[S.loc][+i],st=cst(+i);if(st.done)return'<span class="tag auto">✅ постоянный клиент</span>';const all=st.t.every(Boolean);
     return all?'<button class="btn" data-a="cdone" data-i="'+i+'">Сдать заказ</button>':'<span class="sub">'+st.t.filter(Boolean).length+' / 3</span>'},
   bo:i=>{const b=S.board[+i];if(!b)return'';const x=PR[b.p],done=b.got>=b.need,on=b.p===S.prod;
-    return '<div class="row"><div class="grow"><b>'+b.n+'</b> · '+fn(b.need)+' шт «'+x.n+'»<div class="sub">награда '+fm(b.bonus)+(b.gem?' и 💎 1':'')+(done?'':(on?' · печатаем':'')+' · ждёт ещё '+dur(b.left))+'</div></div>'+
+    return '<div class="row"><div class="grow"><b>'+b.n+'</b> · '+fn(b.need)+' шт «'+x.n+'»<div class="sub">награда '+fm(b.bonus)+(b.gem?' и 💎 1':'')+(done?'':(on?' · печатаем':'')+' · <span data-u="bot:'+i+'"></span>')+'</div></div>'+
      (done?'<button class="btn" data-a="bclaim" data-i="'+i+'">Забрать</button>':on?'':S.unl[b.p]?'<button class="btn sec" data-a="bprod" data-i="'+i+'">Печатать</button>':
       '<button class="btn sec" data-a="prod" data-i="'+b.p+'" data-c="'+x.u+'">Открыть · '+fm(x.u)+'</button>')+'</div>'+
-     (done?'':'<div class="bar"><i style="width:'+Math.min(100,b.got/b.need*100)+'%"></i></div>')},
+     (done?'':'<div class="bar"><i data-w="bo:'+i+'"></i></div>')},
+  bot:i=>{const b=S.board[+i];return b?(b.left<120?'<b class="bad">уйдёт через '+dur(b.left)+'</b>':'ждёт ещё '+dur(b.left)):''},
   imp:()=>{const n=impN();if(n>=4)return'<div class="sub ok">Площадка обустроена полностью: +'+Math.round(IMP_B*400)+'% к цене</div>';
     return '<div class="row"><div class="grow">'+IMP[S.loc][n]+' <span class="tag">'+n+' / 4</span><div class="sub">+'+Math.round(IMP_B*100)+'% к цене всех изделий навсегда</div></div><button class="btn" data-a="imp" data-c="'+impC()+'">'+fm(impC())+'</button></div>'},
   boost:()=>S.boostT>0?'📣 Реклама ×2 · ещё '+Math.ceil(S.boostT)+' с':S.boostCD>0?'📣 ×2 через '+dur(S.boostCD):'📣 Реклама: доход ×2 на 2 мин',
-  bld:()=>{const b=S.build;if(!b)return'';const left=(b.end-Date.now())/1000,tot=BAL.bt[b.to];
-    return '🏗 Стройка: '+LOC[b.to].n+' · осталось '+dur(left)+'<div class="bar"><i style="width:'+Math.min(100,100-left/tot*100)+'%"></i></div>'+
+  bldt:()=>S.build?dur((S.build.end-Date.now())/1000):'',
+  bld:()=>{const b=S.build;if(!b)return'';
+    return '🏗 Стройка: '+LOC[b.to].n+' · осталось <span data-u="bldt"></span><div class="bar"><i data-w="bld"></i></div>'+
     '<div class="row" style="margin-top:6px;justify-content:flex-end"><button class="btn" data-a="skip"'+(S.gems>=skipCost()?'':' disabled')+'>Ускорить · 💎 '+skipCost()+'</button></div>'},
   acc:()=>{const s=S.stat,n=s.i-s.w-s.e-s.p;return `<div class="row"><div class="grow">Выручка</div><b class="ok">+${fm(s.i*60)}</b></div>
     <div class="row"><div class="grow">Зарплаты</div><b class="bad">−${fm(s.w*60)}</b></div><div class="row"><div class="grow">Электричество</div><b class="bad">−${fm(s.e*60)}</b></div>
@@ -562,7 +592,9 @@ function upd(){
   const h=hour();$('rep').textContent='💎 '+S.gems+' · '+(night()?'🌙 ':'☀️ ')+String(h|0).padStart(2,'0')+':'+String((h%1)*60|0).padStart(2,'0')+(S.rep?' · ⭐ '+S.rep:'');
   document.querySelectorAll('[data-u]').forEach(e=>{const[a,b]=e.dataset.u.split(':'),v=U[a](b);if(e._v!==v){e.innerHTML=v;e._v=v}});
   document.querySelectorAll('[data-c]').forEach(e=>{const d=S.money<+e.dataset.c;if(e.disabled!==d&&!e.hasAttribute('data-lock'))e.disabled=d});
+  document.querySelectorAll('[data-w]').forEach(e=>{const[a,b]=e.dataset.w.split(':'),w=Math.min(100,W[a](b))+'%';if(e.style.width!==w)e.style.width=w});
 }
+const W={bo:i=>{const b=S.board[+i];return b?b.got/b.need*100:0},bld:()=>{const b=S.build;return b?100-(b.end-Date.now())/1000/BAL.bt[b.to]*100:0}};
 let fullT=0;
 const A={
   tab:i=>{tab=i;window.scrollTo(0,0)},
@@ -621,10 +653,29 @@ if(location.hash==='#test'&&location.protocol==='file:'){S=fresh();S.money=5e6;S
   S.order={n:'Сувениры для выставки',need:120,got:47,left:83,bonus:36000};S.q.pack=7;S.intro=true}
 render();offline();
 if(!S.intro){S.intro=true;modal('🖨 Printls Tycoon','Гараж, один старый Ender-3 и мечта о заводе на 400 принтеров.<br><br>Сначала всё делаешь сам: снимаешь детали, пакуешь, отвозишь. Подсказки — прямо над цехом.',[{t:'Погнали'}])}else daily();
-let lt=performance.now();
-setInterval(()=>{const n=performance.now();let dt=(n-lt)/1000;lt=n;
-  if(dt>10){S.last=Date.now()-dt*1000;offline()}else{while(dt>0){const s=Math.min(dt,.1);tick(s);dt-=s}}window.TK=performance.now();
-  upd();const h=$('hint');if(h){const t=hintText();if(h.textContent!==t)h.textContent=t}},100);
+// Один цикл на кадрах (Fix Your Timestep): копим прошедшее время, логика шагает ровно по 0,1 с,
+// картинка рисует долю ALPHA между прошлым и текущим тактом. Таймеры браузера не участвуют — им на телефоне верить нельзя.
+const STEP=.1;let lacc=0,lastF=performance.now(),updT=0;window.ALPHA=0;
+const PERF={ft:[],tk:[0,0,0],upd:0}; // для оверлея отладки
+function loop(now){requestAnimationFrame(loop);frameStep(now)}
+function frameStep(now){let fd=(now-lastF)/1000;lastF=now;
+  if(fd>10){S.last=Date.now()-fd*1000;offline();lacc=0}     // вернулись из фона
+  else{lacc+=fd;let n=0;while(lacc>=STEP&&n<120){snap();tick(STEP);lacc-=STEP;n++}if(lacc>STEP)lacc=0;PERF.tk[Math.min(2,n)]++}
+  window.ALPHA=Math.min(1,lacc/STEP);PERF.ft.push(fd*1000);if(PERF.ft.length>300)PERF.ft.shift();
+  if(now-updT>250){updT=now;const t0=performance.now();upd();const h=$('hint');if(h){const t=hintText();if(h.textContent!==t)h.textContent=t}PERF.upd=performance.now()-t0;if($('dbg'))dbgShow()}
+  if(window.render3d)window.render3d()}
+requestAnimationFrame(loop);
+setInterval(()=>{const n=performance.now();if(n-lastF>1000)frameStep(n)},1000); // страховка: кадров нет (скрытый iframe и т.п.) — логика всё равно идёт
+// оверлей отладки: тройной тап по деньгам — время кадра, такты, отрисовка; «Скопировать» — отчёт текстом
+let tapN=0,tapT=0;
+$('m').addEventListener('click',()=>{const t=performance.now();tapN=t-tapT<500?tapN+1:1;tapT=t;if(tapN>=3){tapN=0;const d=$('dbg');if(d)d.remove();else{const e=document.createElement('div');e.id='dbg';
+  e.style.cssText='position:fixed;left:8px;top:70px;z-index:50;background:#000c;color:#9f9;font:11px/1.35 monospace;padding:8px;border-radius:8px;white-space:pre';document.body.appendChild(e);dbgShow()}}});
+function dbgData(){const a=[...PERF.ft].sort((x,y)=>x-y),q=p=>a.length?a[Math.min(a.length-1,Math.floor(a.length*p))].toFixed(1):'-';const T=window.__T3,r=T&&T.R.info;
+  return {fps:a.length?Math.round(1000/(PERF.ft.reduce((x,y)=>x+y,0)/a.length)):0,кадр_p50:q(.5),кадр_p95:q(.95),кадр_p99:q(.99),кадр_макс:a.length?a[a.length-1].toFixed(0):'-',
+    тактов_за_кадр_0_1_2:PERF.tk.join('/'),вызовов:r?r.render.calls:'-',треуг:r?r.render.triangles:'-',геом:r?r.memory.geometries:'-',текстур:r?r.memory.textures:'-',upd_мс:PERF.upd.toFixed(1),
+    dpr:window.devicePixelRatio,эконом:S.eco,площадка:S.loc,принтеров:S.pr.length,ua:navigator.userAgent.slice(0,60)}}
+function dbgShow(){const d=$('dbg');if(!d)return;const o=dbgData();d.textContent=Object.entries(o).map(([k,v])=>k+': '+v).join('\n')+'\n[тап — скопировать]';
+  d.onclick=()=>{try{navigator.clipboard.writeText(JSON.stringify(o))}catch(e){}toast('📋 Отчёт скопирован — перешли его в чат')}}
 setInterval(save,5000);
 
 </script>
@@ -638,7 +689,7 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 const wrap = $('scene');
 const R = new THREE.WebGLRenderer({antialias: true});
-R.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+R.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
 R.shadowMap.enabled = true;
 R.shadowMap.type = THREE.PCFSoftShadowMap;
 wrap.prepend(R.domElement);
@@ -648,21 +699,23 @@ const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 200);
 const hemi = new THREE.HemisphereLight('#ffffff', '#3a4250', 1.6);
 const sun = new THREE.DirectionalLight('#fff4e0', 2.2);
 sun.castShadow = true;
+sun.shadow.autoUpdate = false; // пересчёт только после сборки сцены
 sun.shadow.mapSize.set(1024, 1024);
 sun.shadow.bias = -.0015;
 scene.add(hemi, sun, sun.target);
 
 // ---------- общие материалы и геометрии ----------
-const M = c => new THREE.MeshLambertMaterial({color: c});
-const MB = c => new THREE.MeshBasicMaterial({color: c});
-const G = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+const CM = new Map(), CG = new Map(); // кэш: одна геометрия/материал на все одинаковые детали
+const M = c => CM.get('l' + c) || CM.set('l' + c, new THREE.MeshLambertMaterial({color: c})).get('l' + c);
+const MB = c => CM.get('b' + c) || CM.set('b' + c, new THREE.MeshBasicMaterial({color: c})).get('b' + c);
+const G = (w, h, d) => { const k = w + ',' + h + ',' + d; return CG.get(k) || CG.set(k, new THREE.BoxGeometry(w, h, d)).get(k); };
 const PCOL = ['#2a2a2e', '#dfe3e8', '#cfd5dc', '#3b414a', '#1d2026', '#eceef0', '#f4f5f6', '#56677c'];
 const pMat = PCOL.map(M);
 const LMAT = {run: MB('#3aa0ff'), done: MB('#2ecc71'), fail: MB('#ff4d5e'), failOff: MB('#5a1a22'), nopl: MB('#ffc53d'), off: MB('#555b66')};
 const mGlass = new THREE.MeshLambertMaterial({color: '#0d1117', transparent: true, opacity: .55});
 const mHead = M('#ff8a1f'), mBar = MB('#3aa0ff'), mMetal = M('#8a919c'), mShelf = M('#6d7480'), mOrange = M('#ff8a1f');
 const gBody = G(.34, .34, .32), gGlass = G(.27, .22, .01), gHead = G(.06, .04, .05), gLamp = G(.07, .025, .07);
-const gBar = G(.26, .025, .012); gBar.translate(.13, 0, 0);
+const gBar = new THREE.BoxGeometry(.26, .025, .012); gBar.translate(.13, 0, 0);
 const gPost = G(.035, .98, .035), gShelf = G(1.22, .03, .44);
 const THEME = [{f1: '#5b5f66', f2: '#545860', w: '#7a6f62'}, {f1: '#34507a', f2: '#2f4970', w: '#c9c2b4'},
   {f1: '#b9bdc3', f2: '#b1b5bb', w: '#8f9aa6'}, {f1: '#3f7f86', f2: '#3a767c', w: '#dfe5ea'}];
@@ -686,9 +739,10 @@ function label(text, hot) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({map: t, depthTest: false}));
   s.scale.set(.96 * LS, .24 * LS, 1); s.renderOrder = 10; return s;
 }
-function setLabel(s, text, hot) {
-  const k = text + hot; if (s.userData.k === k) return; s.userData.k = k;
-  const n = label(text, hot); s.material.map.dispose(); s.material.map = n.material.map; s.material.needsUpdate = true;
+function setLabel(s, text, hot, blink) {
+  s.material.opacity = hot && blink === false ? .45 : 1;
+  const k = text + hot; if (s.userData.k === k || T - (s.userData.t || -9) < .25) return; s.userData.k = k; s.userData.t = T;
+  const n = label(text, hot); s.material.map.dispose(); s.material.map = n.material.map; s.material.needsUpdate = true; n.material.dispose();
 }
 
 // ---------- принтеры: у каждой модели свой вид ----------
@@ -742,22 +796,38 @@ function person(k) {
   const p = {o, mix, act, cur: null, x: 0, z: 0, path: [], carry: false, wait: 0};
   p.play = n => { if (p.cur === n || !act[n]) return; const a = act[n].reset().fadeIn(.2).play(); if (p.cur) act[p.cur].fadeOut(.2); p.cur = n; };
   const bx = prop('box', .75); bx.position.set(0, .3, .17); bx.visible = false; o.add(bx); p.box = bx;
+  o.traverse(m => { if (m.isMesh) m.castShadow = false; });
   p.play('idle'); world.add(o); return p;
 }
 
 // ---------- сборка мира ----------
 let LS = 1, conv = [], world = null, L = null, built = '', printers = [], hits = [], people = {}, zones = {}, van = null, drone = null, server = null, flo = [];
 const rackPos = rp; // раскладка общая с логикой: lay() и rp() из основного скрипта
+let prG = null, prHits = [], prKey = '';
+function buildPrinters() {
+  if (prG) { world.remove(prG); prG.traverse(o => { if (o.isSprite) o.material.dispose(); }); }
+  prG = new THREE.Group(); world.add(prG); printers = []; prHits = [];
+  for (let r = 0; r < L.VR; r++) { const [rx, rz] = rackPos(r);
+    for (let j = 0; j < 6; j++) {
+      const i = r * 6 + j, x = S.pr[i]; if (!x) continue;
+      const v = mkPrinter(x.t); v.g.position.set(rx + .22 + (j % 3) * .39, j < 3 ? .075 : .515, rz + .22);
+      v.hit.userData.pi = i; prG.add(v.g); prHits.push(v.hit);
+      printers.push(Object.assign(v, {i, ph: Math.random() * 6, jump: 0}));
+    } }
+  sun.shadow.needsUpdate = true;
+}
+let own = []; // текстуры и материалы этой сборки — освобождаем при следующей
 function build() {
+  for (const o of own) o.dispose(); own = [];
   if (world) scene.remove(world);
-  world = new THREE.Group(); scene.add(world); L = lay(); LS = Math.max(1, Math.max(L.W, L.H) / 7); printers = []; hits = []; people = {}; flo = []; conv = [];
-  R.shadowMap.enabled = !S.eco; R.setPixelRatio(S.eco ? 1 : Math.min(2, window.devicePixelRatio || 1)); sun.castShadow = !S.eco;
+  world = new THREE.Group(); scene.add(world); L = lay(); prG = null; LS = Math.max(1, Math.max(L.W, L.H) / 7); printers = []; hits = []; people = {}; flo = []; conv = [];
+  R.shadowMap.enabled = !S.eco; R.setPixelRatio(S.eco ? 1 : Math.min(1.5, window.devicePixelRatio || 1)); sun.castShadow = !S.eco;
   const th = THEME[TH()];
   // пол: плитка, у фургона асфальт
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(L.W, L.H), new THREE.MeshLambertMaterial({map: canvasTex(512, 512, (g, w, h) => {
     const n = 16; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { g.fillStyle = (i + j) % 2 ? th.f1 : th.f2; g.fillRect(i * w / n, j * h / n, w / n + 1, h / n + 1); }
   })}));
-  floor.material.map.repeat.set(L.W / 4, L.H / 4); floor.material.map.wrapS = floor.material.map.wrapT = THREE.RepeatWrapping;
+  own.push(floor.material, floor.material.map); floor.material.map.repeat.set(L.W / 4, L.H / 4); floor.material.map.wrapS = floor.material.map.wrapT = THREE.RepeatWrapping;
   floor.rotation.x = -Math.PI / 2; floor.position.set(L.W / 2, 0, L.H / 2); floor.receiveShadow = true; world.add(floor);
   const asph = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 2.1), M('#2b2f36')); asph.rotation.x = -Math.PI / 2; asph.position.set(L.dock + .85, .005, L.z0 + 1.7); asph.receiveShadow = true; world.add(asph);
   for (let i = 0; i < 3; i++) { const ln = new THREE.Mesh(new THREE.PlaneGeometry(.05, .8), MB('#e8e8e8')); ln.rotation.x = -Math.PI / 2; ln.position.set(L.dock - .1 + (i ? 1.9 : 0), .01, L.z0 + 1.7); if (i < 2) world.add(ln); }
@@ -772,14 +842,14 @@ function build() {
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.6, .4), new THREE.MeshBasicMaterial({transparent: true, map: canvasTex(512, 128, (g) => {
     g.fillStyle = '#ff8a1f'; g.font = '900 96px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('PRINTLS', 256, 68);
   })}));
-  sign.position.set(L.W / 2, .55, .005); world.add(sign);
+  sign.position.set(L.W / 2, .55, .005); world.add(sign); own.push(sign.material, sign.material.map);
   const plant = prop('plant', 1.2); plant.position.set(.15, 0, L.hz + .1); world.add(plant);
   if (TH() === 0) { const gd = new THREE.Mesh(G(1.1, .7, .02), M('#9aa3ad')); gd.position.set(L.W * .22, .35, .005); world.add(gd);
     for (let i = 0; i < 6; i++) { const l = new THREE.Mesh(G(1.1, .012, .025), M('#7d858f')); l.position.set(L.W * .22, .08 + i * .11, .02); world.add(l); } }
   if (TH() === 1) { const so = prop('sofa', 1.1); so.position.set(L.W - .7, 0, L.hz - .2); so.rotation.y = -Math.PI / 2; world.add(so); const p2 = prop('plant', 1.2); p2.position.set(L.W - .25, 0, L.hz + .35); world.add(p2); }
   if (TH() >= 2) for (let c = 0; c <= L.cols; c++) { const ln = new THREE.Mesh(new THREE.PlaneGeometry(.04, L.hz), MB('#f5c518')); ln.rotation.x = -Math.PI / 2; ln.position.set(.32 + c * 1.9 - (c ? .2 : 0), .006, L.hz / 2 + .2); world.add(ln); }
   if (TH() === 3) { const cv = new THREE.Mesh(G(.3, .12, L.z0 - .3), M('#3b3f46')); cv.position.set(L.W - .25, .06, L.z0 / 2 + .4); world.add(cv);
-    for (let i = 0; i < 6; i++) { const b = prop('box', .7); b.position.set(L.W - .25, .12, .8 + i * (L.z0 - .8) / 6); world.add(b); conv.push(b); } }
+    for (let i = 0; i < 6; i++) { const b = prop('box', .7); b.traverse(m => { if (m.isMesh) m.castShadow = false; }); b.position.set(L.W - .25, .12, .8 + i * (L.z0 - .8) / 6); world.add(b); conv.push(b); } }
   // уголок инженера: стол, монитор, кресло
   const desk = prop('desk', 1.1); desk.position.set(L.W - .95, 0, .05); world.add(desk);
   const scr = prop('screen', 1.1); scr.position.set(L.W - .85, .42, .12); world.add(scr);
@@ -789,13 +859,8 @@ function build() {
     const [rx, rz] = rackPos(r);
     for (const y of [.06, .5, .95]) { const sh = new THREE.Mesh(gShelf, mShelf); sh.position.set(rx + .61, y, rz + .22); sh.castShadow = sh.receiveShadow = true; world.add(sh); }
     for (const [a, b] of [[0, 0], [1.2, 0], [0, .42], [1.2, .42]]) { const p = new THREE.Mesh(gPost, mMetal); p.position.set(rx + a + .01, .49, rz + b + .01); p.castShadow = true; world.add(p); }
-    for (let j = 0; j < 6; j++) {
-      const i = r * 6 + j, x = S.pr[i]; if (!x) continue;
-      const v = mkPrinter(x.t); v.g.position.set(rx + .22 + (j % 3) * .39, j < 3 ? .075 : .515, rz + .22);
-      v.hit.userData.pi = i; world.add(v.g); hits.push(v.hit);
-      printers.push(Object.assign(v, {i, ph: Math.random() * 6, jump: 0}));
-    }
   }
+  buildPrinters();
   // зоны: ОТК, упаковка, фургон
   const mkZone = (k, x, z, boxKind) => {
     const t = prop('table', 1.35); t.position.set(x + .57, 0, z + .32); world.add(t);
@@ -805,18 +870,18 @@ function build() {
       b.visible = false; world.add(b); stack.push(b);
     }
     const hit = new THREE.Mesh(G(1.2, .8, .8), new THREE.MeshBasicMaterial({visible: false})); hit.position.set(x + .57, .4, z + .32); hit.userData.zone = k; world.add(hit); hits.push(hit);
-    const lb = label('', false); lb.position.set(x + .57, 1.0, z + .32); world.add(lb);
+    const lb = label('', false); own.push(lb.material); lb.position.set(x + .57, 1.0, z + .32); world.add(lb);
     zones[k] = {stack, lb, x, z};
   };
   if (S.loc >= OTK_LV) mkZone(0, L.otk, L.z0, 'tray'); mkZone(1, L.pack, L.z0, 'box');
   van = mkVan(); van.g.position.set(L.dock, 0, L.z0 + 1.65); world.add(van.g);
   const vh = new THREE.Mesh(G(1.5, .9, .8), new THREE.MeshBasicMaterial({visible: false})); vh.userData.zone = 2; van.g.add(vh); vh.position.set(.6, .4, 0); hits.push(vh);
-  zones[2] = {lb: label('', false)}; zones[2].lb.position.set(.6, 1.05, 0); van.g.add(zones[2].lb); // подпись едет вместе с фургоном
+  zones[2] = {lb: label('', false)}; own.push(zones[2].lb.material); zones[2].lb.position.set(.6, 1.05, 0); van.g.add(zones[2].lb); // подпись едет вместе с фургоном
   // люди
   people = {op: [], pack: [], otk: [], cr: person('f2')};
   // сервер и ИИ-дрон
   server = new THREE.Group(); const sb = new THREE.Mesh(G(.38, .9, .34), M('#20242c')); sb.position.y = .45; sb.castShadow = true; server.add(sb);
-  server.leds = []; for (let i = 0; i < 6; i++) { const l = new THREE.Mesh(G(.04, .04, .01), MB('#2ecc71')); l.position.set(-.08 + (i % 2) * .16, .2 + (i >> 1) * .22, .175); server.add(l); server.leds.push(l); }
+  server.leds = []; for (let i = 0; i < 6; i++) { const l = new THREE.Mesh(G(.04, .04, .01), new THREE.MeshBasicMaterial({color: '#2ecc71'})); l.position.set(-.08 + (i % 2) * .16, .2 + (i >> 1) * .22, .175); server.add(l); server.leds.push(l); }
   server.position.set(L.W - .35, 0, .7); world.add(server);
   drone = new THREE.Group(); const db = new THREE.Mesh(new THREE.SphereGeometry(.07, 12, 8), mOrange); drone.add(db);
   drone.rot = []; for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(.05, .05, .006, 12), new THREE.MeshBasicMaterial({color: '#cfd8e6', transparent: true, opacity: .6})); r.position.set(a * .09, .03, b * .09); drone.add(r); drone.rot.push(r); }
@@ -824,7 +889,7 @@ function build() {
   drone.position.set(L.W - .6, 1.4, .5); world.add(drone);
   // свет и тени под размер мира
   sun.position.set(L.W + 4, 9, L.H * .4 + 4); sun.target.position.set(L.W / 2, 0, L.H / 2);
-  const sc = sun.shadow.camera, m = Math.max(L.W, L.H); sc.left = -m; sc.right = m; sc.top = m; sc.bottom = -m; sc.far = 40; sc.updateProjectionMatrix();
+  const sc = sun.shadow.camera, m = Math.max(L.W, L.H); sc.left = -m; sc.right = m; sc.top = m; sc.bottom = -m; sc.far = 40; sc.updateProjectionMatrix(); sun.shadow.needsUpdate = true;
   if (!view.init || view.key !== S.loc + ':' + L.VR) { view.key = S.loc + ':' + L.VR; view.init = true; if (L.VR > 6) { view.t.set(L.W * .4, 0, L.z0 - .6); view.zoom = 1.9; } else { view.t.set(L.W * (L.VR <= 3 ? .45 : .42), 0, L.H * (L.VR <= 3 ? .4 : .46)); view.zoom = L.VR <= 3 ? .92 : .95; } }
 }
 function mkVan() {
@@ -833,7 +898,7 @@ function mkVan() {
   const cab = new THREE.Mesh(G(.36, .42, .58), M('#e8ebef')); cab.position.set(1.11, .32, 0);
   const wind = new THREE.Mesh(G(.01, .18, .48), M('#5c7fa3')); wind.position.set(1.295, .42, 0);
   const st = new THREE.Mesh(G(.96, .06, .59), mOrange); st.position.set(.45, .48, 0);
-  for (const o of [cargo, cab, wind, st]) { o.castShadow = true; g.add(o); }
+  for (const o of [cargo, cab, wind, st]) g.add(o);
   const gw = new THREE.CylinderGeometry(.1, .1, .08, 14); gw.rotateX(Math.PI / 2);
   for (const [a, b] of [[.2, .3], [.2, -.3], [1.05, .3], [1.05, -.3]]) { const wh = new THREE.Mesh(gw, M('#15171b')); wh.position.set(a, .1, b); g.add(wh); }
   return {g, st: 'park', dx: 0};
@@ -869,7 +934,7 @@ const endPtr = e => {
   if (!d || d.moved || e.type !== 'pointerup') return;
   const r = R.domElement.getBoundingClientRect(), ray = new THREE.Raycaster();
   ray.setFromCamera(new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), cam);
-  const h = ray.intersectObjects(hits, false)[0]; if (!h) return;
+  const h = ray.intersectObjects(hits.concat(prHits), false)[0]; if (!h) return;
   const u = h.object.userData;
   const m0 = S.money;
   if (u.pi !== undefined) { A.p(u.pi); const v = printers.find(v => v.i === u.pi); if (v) v.jump = 1; } else if (u.zone !== undefined) A.st(u.zone);
@@ -883,25 +948,25 @@ R.domElement.addEventListener('wheel', e => { e.preventDefault(); view.zoom = Ma
 // человечек = агент из логики: стоит там же, где агент, несёт столько же, сколько агент
 function pool(arr, n, kind) { while (arr.length < n) arr.push(person(kind)); arr.forEach((p, i) => p.o.visible = i < n); }
 // логика шагает 10 раз в секунду, кадр — 60: рисуем между прошлым и текущим тактом (интерполяция, отставание 0,1 с),
-const TKa = () => Math.min(1, Math.max(0, (performance.now() - (window.TK || 0)) / 100));
+const TKa = () => window.ALPHA || 0;
 // а «идёт / стоит» берём из состояния агента, а не из сдвига за кадр — иначе анимация мигает
 function show(p, a, dt) {
   const al = TKa(), x0 = a.px ?? a.x, z0 = a.pz ?? a.z, tx = x0 + (a.x - x0) * al, tz = z0 + (a.z - z0) * al;
-  const dx = a.x - x0, dz = a.z - z0, moving = a.path.length > 0 && !(a.w > 0);
-  if (Math.hypot(dx, dz) > 1e-3) p.o.rotation.y = Math.atan2(dx, dz);
+  const dx = a.x - x0, dz = a.z - z0, moving = a.pw ?? (a.path.length > 0);
+  if (Math.hypot(dx, dz) > 1e-3) { let d = Math.atan2(dx, dz) - p.o.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); p.o.rotation.y += d * Math.min(1, dt * 12); }
   p.x = tx; p.z = tz;
-  p.play(moving ? 'walk' : a.c ? 'holding-both' : a.st === 'pack' && S.q.pack >= 1 ? 'interact-right' : 'idle');
   p.box.visible = a.c > 0; p.box.scale.setScalar(.75 * Math.min(1.6, 1 + (a.c - 1) * .15));
+  if (a.w > 0 && a.w < .3 && p.cur === 'walk') return; // короткая остановка взять деталь — не дёргаем анимацию
+  p.play(moving ? 'walk' : a.c ? 'holding-both' : a.st === 'pack' && S.q.pack >= 1 ? 'interact-right' : 'idle');
 }
 
 // ---------- кадр ----------
 const clock = new THREE.Clock(); let T = 0, lt = 0, ready = false; const fps = {n: 0, t: 0, warned: 0};
 function frame() {
-  requestAnimationFrame(frame);
   const dt = Math.min(.1, clock.getDelta()); T += dt;
   if (!ready || tab !== 'farm' || !wrap.clientWidth) return;
-  const key = S.racks + '|' + S.loc + '|' + S.eco + '|' + S.pr.slice(0, 108).map(x => x.t).join('');
-  if (key !== built) { built = key; build(); }
+  const key = S.racks + '|' + S.loc + '|' + S.eco, pk = S.pr.slice(0, L ? L.VR * 6 : 108).map(x => x.t).join('');
+  if (key !== built) { built = key; prKey = pk; build(); } else if (pk !== prKey) { prKey = pk; buildPrinters(); }
   const on = !(S.out > 0) || S.up.ups;
   hemi.intensity = on ? 1.6 : .35; sun.intensity = on ? 2.2 : .25;
   for (const v of printers) {
@@ -917,10 +982,10 @@ function frame() {
   const blink = Math.sin(T * 6) > -.3;
   [['otk', 0, 'ОТК'], ['pack', 1, 'Упаковка']].forEach(([k, i, n]) => {
     const z = zones[i], q = S.q[k]; if (!z) return; z.stack.forEach((b, j) => b.visible = j < Math.min(8, Math.ceil(q / qcap(k) * 8)));
-    setLabel(z.lb, n + ' ' + fn(q) + '/' + qcap(k), (!tm(k) && q >= 1 || q >= qcap(k)) && blink);
+    setLabel(z.lb, n + ' ' + fn(q) + '/' + qcap(k), !tm(k) && q >= 1 || q >= qcap(k), blink);
   });
   const nv = S.ag.ship.length, f0 = S.ag.ship[0];
-  setLabel(zones[2].lb, (tm('ship') > 1 ? '🚚×' + tm('ship') + ' ' : 'Доставка ') + fn(S.q.ship) + '/' + qcap('ship'), (!tm('ship') && S.q.ship >= 1 && f0 && f0.st === 'dock' || S.q.ship >= qcap('ship')) && blink);
+  setLabel(zones[2].lb, (tm('ship') > 1 ? '🚚×' + tm('ship') + ' ' : 'Доставка ') + fn(S.q.ship) + '/' + qcap('ship'), (!tm('ship') && S.q.ship >= 1 && f0 && f0.st === 'dock' || S.q.ship >= qcap('ship')), blink);
   // фургон №1: в рейсе — уехал и возвращается (половина рейса туда, половина обратно)
   const ft = f0 && f0.st === 'road' && f0.T ? (f0.pt ? f0.pt + (f0.t - f0.pt) * TKa() : f0.t) : 0;
   van.dx = ft ? (k => 5 * (k < .5 ? k * 2 : 2 - k * 2))(1 - ft / f0.T) : 0;
@@ -955,7 +1020,7 @@ function frame() {
   placeCam(); R.render(scene, cam);
 }
 loadAssets().then(() => { ready = true; $('smsg').remove(); }).catch(e => { $('smsg').textContent = 'Не загрузилась 3D-графика: ' + e.message; });
-frame();
-window.__T3 = {get hits() { return hits; }, get people() { return people; }, get van() { return van; }, cam, R, THREE};
+window.render3d = frame; // зовёт главный цикл game.js после тактов логики
+window.__T3 = {get hits() { return hits.concat(prHits); }, get people() { return people; }, get van() { return van; }, cam, R, THREE};
 </script>
 </body></html>
