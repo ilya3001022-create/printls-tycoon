@@ -61,6 +61,7 @@ h3{margin:0 0 6px;font-size:15px}
 .offer:empty{display:none}.offer{border:1px solid var(--run)}
 .task{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid #222b3b}.task:first-of-type{border-top:0}
 .ic{width:46px;height:46px;flex:none;background:center/contain no-repeat}
+.ic.sm{display:inline-block;width:1.25em;height:1.25em;vertical-align:-.3em;margin-right:2px}
 nav button i.ic{display:block;width:26px;height:26px;margin:0 auto 1px}
 </style></head><body>
 <header><div class="row">
@@ -631,7 +632,7 @@ const TAB_IC={farm:'tab_farm',chain:'tab_chain',shop:'tab_shop',team:'tab_team',
 const PR_IC=['keychain','magnet','stand','planter','organizer','figurine','chess','toolholder','lamp','gear','enclosure','bracket','autopart','sensor','drone','satellite','batch'];
 const ICS=window.ART&&ART.icons||{};
 if(Object.keys(ICS).length){const st=document.createElement('style');st.textContent=Object.entries(ICS).map(([k,v])=>'.i-'+k+'{background-image:url('+v+')}').join('\n');document.head.appendChild(st)}
-const icn=k=>ICS[k]?'<i class="ic i-'+k+'"></i>':'';
+const icn=(k,sm)=>ICS[k]?'<i class="ic'+(sm?' sm':'')+' i-'+k+'"></i>':''; // sm — маленькая, в строку текста
 // новичку системы открываются по одной (урок Idle Police: «всё сразу — непонятно»); открытое не закрывается
 const GATE={shop:['🛒 Магазин',()=>S.made>=5||S.pr.length>1],board:['📋 Заказы',()=>S.made>=15],chain:['🔗 Участки',()=>S.made>=12||tm('pack')],
   team:['👥 Люди',()=>S.made>=20],boost:['📣 Реклама',()=>S.made>=25],clients:['🤝 Крупные клиенты',()=>S.made>=30],grow:['📈 Рост',()=>S.made>=40||S.loc>0],
@@ -672,7 +673,7 @@ const U={ // живые подписи, обновляются 10 раз в се
   cd:i=>{const c=CL[S.loc][+i],st=cst(+i);if(st.done)return'<span class="tag auto">✅ постоянный клиент</span>';const all=st.t.every(Boolean);
     return all?'<button class="btn" data-a="cdone" data-i="'+i+'">Сдать заказ</button>':'<span class="sub">'+st.t.filter(Boolean).length+' / 3</span>'},
   bo:i=>{const b=S.board[+i];if(!b)return'';const x=PR[b.p],done=b.got>=b.need,on=b.p===S.prod;
-    return '<div class="row"><div class="grow"><b>'+b.n+'</b> · '+fn(b.need)+' шт «'+x.n+'»<div class="sub">награда '+fm(b.bonus)+(b.gem?' и 💎 1':'')+(done?'':(on?' · печатаем':'')+' · <span data-u="bot:'+i+'"></span>')+'</div></div>'+
+    return '<div class="row">'+icn(PR_IC[b.p])+'<div class="grow"><b>'+b.n+'</b> · '+fn(b.need)+' шт «'+x.n+'»<div class="sub">награда '+fm(b.bonus)+(b.gem?' и 💎 1':'')+(done?'':(on?' · печатаем':'')+' · <span data-u="bot:'+i+'"></span>')+'</div></div>'+
      (done?'<button class="btn" data-a="bclaim" data-i="'+i+'">Забрать</button>':on?'':S.unl[b.p]?'<button class="btn sec" data-a="bprod" data-i="'+i+'">Печатать</button>':
       '<button class="btn sec" data-a="prod" data-i="'+b.p+'" data-c="'+x.u+'">Открыть · '+fm(x.u)+'</button>')+'</div>'+
      (done?'':'<div class="bar"><i data-w="bo:'+i+'"></i></div>')},
@@ -704,13 +705,13 @@ function roleCard(k){const r=S.team[k],R=ROLE[k];return `<div class="card"><h3>$
 function view(){
   const p=P(),full=S.pr.length>=maxPr();
   if(tab==='farm'){let h=`
-  <div class="card"><div class="row"><div class="grow"><h3>Принтеры <span data-u="cnt"></span></h3><div class="sub">печатаем «${p.n}» · <span data-u="rate"></span></div></div>
+  <div class="card"><div class="row"><div class="grow"><h3>Принтеры <span data-u="cnt"></span></h3><div class="sub">печатаем ${icn(PR_IC[S.prod],1)}«${p.n}» · <span data-u="rate"></span></div></div>
    <button class="btn" data-a="clrall" data-u="done"></button></div>
    ${opn('boost')?'<button class="btn sec" style="width:100%;margin-top:8px" data-a="boost" data-u="boost"></button>':''}
    <div class="row" style="margin-top:8px"><div class="grow"><b data-u="pl"></b><div class="sub" data-u="plt"></div></div>
    <button class="btn sec" data-a="spool" data-i="1" data-c="${plPrice()}">1 кг · ${fm(plPrice())}</button>
    <button class="btn sec" data-a="spool" data-i="10" data-c="${plPrice()*8.7}">10 кг · ${fm(plPrice()*8.7)}</button></div></div>
-   ${S.loc>=MP_LV?'<div class="card row"><div class="grow"><b>⭐ Рейтинг магазина <span data-u="star"></span></b><div class="sub">Маркетплейс: рейтинг тянется к уровню брака (калибровка поднимает), сорванный заказ −0,15. От рейтинга зависит спрос.</div></div></div>':''}
+   ${S.loc>=MP_LV?'<div class="card row"><div class="grow"><b>'+(icn('star',1)||'⭐ ')+'Рейтинг магазина <span data-u="star"></span></b><div class="sub">Маркетплейс: рейтинг тянется к уровню брака (калибровка поднимает), сорванный заказ −0,15. От рейтинга зависит спрос.</div></div></div>':''}
    ${opn('dq')?'<h3>📅 Задания дня</h3><div class="card" data-u="dq"></div>':''}
    ${opn('games')?`<h3>🎮 Мини-игры <span class="sub">— 20 секунд, за бонус</span></h3><div class="card"><div class="row" style="flex-wrap:wrap;gap:6px">
     <button class="btn sec" data-a="game" data-i="cal" data-u="gm:cal"></button><button class="btn sec" data-a="game" data-i="knot" data-u="gm:knot"></button><button class="btn sec" data-a="game" data-i="box" data-u="gm:box"></button></div>
@@ -767,7 +768,7 @@ function upd(){backBtn();gates();
   $('m').textContent=fm(S.money);
   {const n=S.rate-S.exp;$('hs').textContent='≈ '+(n<0?'−'+fm(-n):fm(n))+'/с чистыми · '+P().n}
   $('loc').textContent=Lc().n;
-  const h=hour();$('rep').textContent='💎 '+S.gems+' · '+(night()?'🌙 ':'☀️ ')+String(h|0).padStart(2,'0')+':'+String((h%1)*60|0).padStart(2,'0')+(S.rep?' · ⭐ '+S.rep:'');
+  const h=hour();$('rep').innerHTML=(icn('gem',1)||'💎 ')+S.gems+' · '+(night()?'🌙 ':'☀️ ')+String(h|0).padStart(2,'0')+':'+String((h%1)*60|0).padStart(2,'0')+(S.rep?' · '+(icn('star',1)||'⭐ ')+S.rep:'');
   document.querySelectorAll('[data-u]').forEach(e=>{const[a,b]=e.dataset.u.split(':'),v=U[a](b);if(e._v!==v){e.innerHTML=v;e._v=v}});
   document.querySelectorAll('[data-c]').forEach(e=>{const d=S.money<+e.dataset.c;if(e.disabled!==d&&!e.hasAttribute('data-lock'))e.disabled=d});
   document.querySelectorAll('[data-w]').forEach(e=>{const[a,b]=e.dataset.w.split(':'),w=Math.min(100,W[a](b))+'%';if(e.style.width!==w)e.style.width=w});
