@@ -109,23 +109,23 @@ const PT=[ // принтеры: цена ₽ (ориентир — РФ 2026), �
  {n:'Bambu H2D',s:'H2D',c:300000,sp:7,lv:4},
  {n:'Промышленный',s:'PRO',c:2500000,sp:15,lv:5}];
 const PR=[ // изделия: время печати на Ender (реальные часы × 30 = игровые секунды), цена ₽ (чистыми, после комиссии), граммы, пластик ₽/кг, цена запуска (модель, оснастка), уровень
- {n:'Брелок',t:8,p:60,g:5,m:'PLA',kg:1300,u:0,lv:0},
- {n:'Магнит на холодильник',t:12,p:90,g:8,m:'PLA',kg:1300,u:3000,lv:0},
- {n:'Подставка для телефона',t:24,p:200,g:25,m:'PLA',kg:1300,u:8000,lv:0},
- {n:'Кашпо',t:60,p:550,g:45,m:'PLA',kg:1300,u:40000,lv:1},
- {n:'Органайзер для стола',t:75,p:750,g:50,m:'PLA',kg:1300,u:70000,lv:1},
- {n:'Фигурка',t:100,p:1100,g:60,m:'PLA',kg:1300,u:120000,lv:1},
- {n:'Шахматы',t:200,p:2400,g:110,m:'PLA',kg:1300,u:300000,lv:2},
- {n:'Держатель инструмента',t:150,p:2000,g:120,m:'PETG',kg:1500,u:500000,lv:2},
- {n:'Корпус лампы',t:180,p:2600,g:150,m:'PETG',kg:1500,u:800000,lv:2},
- {n:'Шестерня',t:130,p:2100,g:160,m:'PETG',kg:1500,u:2000000,lv:3},
- {n:'Корпус для электроники',t:250,p:4400,g:180,m:'ABS',kg:1700,u:3000000,lv:3},
- {n:'Кронштейн PETG-CF',t:220,p:4300,g:200,m:'PETG-CF',kg:4000,u:5000000,lv:3},
- {n:'Деталь для автосервиса',t:250,p:5400,g:220,m:'PA-CF',kg:6000,u:10000000,lv:4},
- {n:'Корпус датчика',t:320,p:7500,g:250,m:'PA-CF',kg:6000,u:15000000,lv:4},
- {n:'Корпус дрона CF',t:600,p:15600,g:300,m:'PA-CF',kg:6000,u:25000000,lv:4},
- {n:'Деталь для спутника',t:840,p:24000,g:350,m:'PEEK',kg:25000,u:50000000,lv:5},
- {n:'Серийная партия',t:1100,p:34500,g:400,m:'PA-CF',kg:6000,u:80000000,lv:5}];
+ {n:'Брелок',t:5,p:60,g:5,m:'PLA',kg:1300,u:0,lv:0},
+ {n:'Магнит на холодильник',t:7,p:90,g:8,m:'PLA',kg:1300,u:3000,lv:0},
+ {n:'Подставка для телефона',t:14,p:200,g:25,m:'PLA',kg:1300,u:8000,lv:0},
+ {n:'Кашпо',t:36,p:550,g:45,m:'PLA',kg:1300,u:40000,lv:1},
+ {n:'Органайзер для стола',t:45,p:750,g:50,m:'PLA',kg:1300,u:70000,lv:1},
+ {n:'Фигурка',t:60,p:1100,g:60,m:'PLA',kg:1300,u:120000,lv:1},
+ {n:'Шахматы',t:120,p:2400,g:110,m:'PLA',kg:1300,u:300000,lv:2},
+ {n:'Держатель инструмента',t:90,p:2000,g:120,m:'PETG',kg:1500,u:500000,lv:2},
+ {n:'Корпус лампы',t:110,p:2600,g:150,m:'PETG',kg:1500,u:800000,lv:2},
+ {n:'Шестерня',t:80,p:2100,g:160,m:'PETG',kg:1500,u:2000000,lv:3},
+ {n:'Корпус для электроники',t:150,p:4400,g:180,m:'ABS',kg:1700,u:3000000,lv:3},
+ {n:'Кронштейн PETG-CF',t:135,p:4300,g:200,m:'PETG-CF',kg:4000,u:5000000,lv:3},
+ {n:'Деталь для автосервиса',t:150,p:5400,g:220,m:'PA-CF',kg:6000,u:10000000,lv:4},
+ {n:'Корпус датчика',t:190,p:7500,g:250,m:'PA-CF',kg:6000,u:15000000,lv:4},
+ {n:'Корпус дрона CF',t:360,p:15600,g:300,m:'PA-CF',kg:6000,u:25000000,lv:4},
+ {n:'Деталь для спутника',t:500,p:24000,g:350,m:'PEEK',kg:25000,u:50000000,lv:5},
+ {n:'Серийная партия',t:650,p:34500,g:400,m:'PA-CF',kg:6000,u:80000000,lv:5}];
 const ui=n=>PR.findIndex(x=>x.n===n); // индекс изделия по имени — задачи клиентов не ломаются при новых изделиях
 const LOC=[ // max — принтеров, th — оформление 3D, m — канал продаж (множитель цены), c — переезд (аренда, ремонт, электрика). Столы и места — без потолка
  {n:'🏚 Гараж',max:4,th:0,m:1,c:0},
@@ -176,14 +176,14 @@ const CL=[ // крупные клиенты: 3 задачи → постоянн
   {n:'Магазин запчастей',d:'запчасти к принтерам',t:[['Конвейер 2 ур.',()=>S.up.conv||0,2],['8 курьеров',()=>tm('ship'),8],['Сделай 40 000 деталей',()=>S.made,4e4]],r:[2.5e6,.03,30]},
   {n:'Ивент-агентство',d:'декор для выставок',t:[['Найми ИИ-дрон',()=>S.mg.ai?1:0,1],['Камеры 3 ур.',()=>S.up.cam||0,3],['Сделай 30 000 деталей',()=>S.made,3e4]],r:[3.5e6,.05,40]}],
  [{n:'Производитель дронов',d:'корпуса серией',t:[['Поставь 120 принтеров',()=>S.pr.length,120],['Открой «Корпус дрона CF»',()=>S.unl[ui('Корпус дрона CF')]?1:0,1],['Доход 1 000 ₽/с',()=>S.rate,1000]],r:[8e6,.03,40]},
-  {n:'Федеральная сеть',d:'нужен стабильный брак ниже 3%',t:[['5 контролёров ОТК',()=>tm('otk'),5],['Калибровка 6 ур.',()=>S.up.cal||0,6],['Сделай 650 000 деталей',()=>S.made,6.5e5]],r:[1.2e7,.03,40]},
-  {n:'Госзаказ',d:'большая партия по тендеру',t:[['Сервер Printls',()=>S.mg.srv?1:0,1],['Расширь ОТК 4 раза',()=>S.qc.otk,4],['Сделай 500 000 деталей',()=>S.made,5e5]],r:[1.8e7,.05,60]}],
+  {n:'Федеральная сеть',d:'нужен стабильный брак ниже 3%',t:[['5 контролёров ОТК',()=>tm('otk'),5],['Калибровка 6 ур.',()=>S.up.cal||0,6],['Сделай 900 000 деталей',()=>S.made,9e5]],r:[1.2e7,.03,40]},
+  {n:'Госзаказ',d:'большая партия по тендеру',t:[['Сервер Printls',()=>S.mg.srv?1:0,1],['Расширь ОТК 4 раза',()=>S.qc.otk,4],['Сделай 700 000 деталей',()=>S.made,7e5]],r:[1.8e7,.05,60]}],
  [{n:'Экспорт',d:'поставки за рубеж',t:[['Поставь 250 принтеров',()=>S.pr.length,250],['Доход 3 000 ₽/с',()=>S.rate,3000],['Сделай 1 млн деталей',()=>S.made,1e6]],r:[3e7,.05,80]},
   {n:'Автоконцерн',d:'серийные детали',t:[['5 промышленных',()=>S.cnt[7]||0,5],['Конвейер 8 ур.',()=>S.up.conv||0,8],['40 курьеров',()=>tm('ship'),40]],r:[5e7,.05,80]},
   {n:'Космос',d:'кронштейны для спутника',t:[['Скорость печати 15 ур.',()=>S.up.speed||0,15],['Брак 2%',()=>S.up.cal||0,8],['Доход 5 000 ₽/с',()=>S.rate,5000]],r:[8e7,.1,150]}]];
 const ORD=['Сувениры для выставки','Брелоки для вендинга','Фигурки к Новому году','Партия для автосервиса','Подарки для корпоратива','Мерч для блогера'];
 const FAULT=['Спагетти','Засор хотенда','Отлип стол','Застряла нить в AMS'];
-const KEY='printls_tycoon',VER=9; // ключ больше не меняется; формат — по полю ver и миграциям
+const KEY='printls_tycoon',VER=10; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
 let S, acc={i:0,w:0,e:0,p:0}, accT=0, accN=0;
@@ -437,6 +437,7 @@ const skipCost=()=>S.build?Math.max(1,Math.ceil((S.build.end-Date.now())/60000/B
 // старые сохранения: v6 и v7 совместимы по изделиям; более ранние — другая экономика, их не тянем
 const OLDC=[40000,800000,12e6,1.8e9,110e9,110e9],NEWC=[20000,250000,2.5e6,20e6,200e6,200e6]; // цены следующего переезда до/после перехода на рубли
 const MIG={6:s=>{s.ag={op:[],pack:[],ship:[]};return s},7:s=>s,
+  9:s=>{s.eco=0;return s}, // эконом включался сам из-за утечки «+₽» — один раз возвращаем полную графику
   8:s=>{const l=Math.min(5,s.loc||0),f=NEWC[l]/OLDC[l];s.money=Math.max(500,(s.money||0)*f);s.best=(s.best||0)*f;s.run=(s.run||0)*f;s.all=(s.all||0)*f;s.rate=0;s.exp=0;s.fm=0;s.fw=[];s.board=[];s.offer=null;s.order=null;return s}};
 function merge(b,j){for(const k in j){const v=j[k];if(v&&typeof v==='object'&&!Array.isArray(v)&&b[k]&&typeof b[k]==='object'&&!Array.isArray(b[k]))merge(b[k],v);else b[k]=v}return b}
 function upgrade(j){let v=j.ver||0;while(v<VER&&MIG[v]){j=MIG[v](j);v++}j.ver=VER;return merge(fresh(),j)}
@@ -998,12 +999,12 @@ function show(p, a, dt) {
 }
 
 // ---------- кадр ----------
-const clock = new THREE.Clock(); let T = 0, lt = 0, ready = false; const fps = {n: 0, t: 0, warned: 0};
+const clock = new THREE.Clock(); let T = 0, lt = 0, ready = false; const fps = {n: 0, t: 0, warned: 0, bad: 0, from: 0};
 function frame() {
   const dt = Math.min(.1, clock.getDelta()); T += dt;
   if (!ready || tab !== 'farm' || !wrap.clientWidth) return;
   const key = S.racks + '|' + S.loc + '|' + S.eco, pk = S.pr.slice(0, L ? L.VR * 6 : 108).map(x => x.t).join('');
-  if (key !== built) { built = key; prKey = pk; build(); } else if (pk !== prKey) { prKey = pk; buildPrinters(); }
+  if (key !== built) { built = key; prKey = pk; build(); fps.from = T; fps.n = fps.t = 0; } else if (pk !== prKey) { prKey = pk; buildPrinters(); }
   const on = !(S.out > 0) || S.up.ups;
   hemi.intensity = on ? 1.6 : .35; sun.intensity = on ? 2.2 : .25;
   for (const v of printers) {
@@ -1057,15 +1058,17 @@ function frame() {
   if (VIS.cash > 0 && (lt += dt) > .8) {
     const s = label('+' + fm(VIS.cash), false); s.material.map.dispose();
     s.material.map = canvasTex(256, 64, g => { g.fillStyle = '#2ecc71'; g.font = '900 40px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('+' + fm(VIS.cash), 128, 34); });
-    s.position.set(L.dock + .6, 1.2, L.z0 + 1.65); world.add(s); // клиент принял груз — «+₽» над местом стоянки фургона, не улетает с ним за кадр flo.push({s, t: 0}); VIS.cash = 0; lt = 0;
+    s.position.set(L.dock + .6, 1.2, L.z0 + 1.65); world.add(s); flo.push({s, t: 0}); VIS.cash = 0; // клиент принял груз — «+₽» над местом стоянки фургона, не улетает с ним за кадр lt = 0;
   }
   flo = flo.filter(f => { f.t += dt; f.s.position.y += dt * .5; f.s.material.opacity = 1 - f.t / 1.4; if (f.t > 1.4) { world.remove(f.s); f.s.material.map.dispose(); return false; } return true; });
   conv.forEach(b => { b.position.z += dt * .4; if (b.position.z > L.z0 - .1) b.position.z = .8; });
-  fps.n++; fps.t += dt; if (fps.t > 3) { if (!S.eco && fps.n / fps.t < 24 && !fps.warned) { fps.warned = 1; S.eco = 1; toast('🪫 Включил экономную графику — телефон не тянет тени. Вернуть можно во вкладке «Рост»'); } fps.n = 0; fps.t = 0; }
+  // автоэконом: не мерим первые 5 с после загрузки и пересборки (там рывки у всех), включаем только после двух плохих окон подряд (FPS < 24)
+  if (T - fps.from > 5) { fps.n++; fps.t += dt; if (fps.t > 4) { const f = fps.n / fps.t; fps.bad = f < 24 ? fps.bad + 1 : 0;
+    if (!S.eco && fps.bad >= 2 && !fps.warned) { fps.warned = 1; S.eco = 1; S.ecoAuto = 1; toast('🪫 Включил экономную графику — телефон не тянет тени. Вернуть можно во вкладке «Рост»'); } fps.n = 0; fps.t = 0; } }
   placeCam(); R.render(scene, cam);
 }
 loadAssets().then(() => { ready = true; $('smsg').remove(); }).catch(e => { $('smsg').textContent = 'Не загрузилась 3D-графика: ' + e.message; });
 window.render3d = frame; // зовёт главный цикл game.js после тактов логики
-window.__T3 = {get hits() { return hits.concat(prHits); }, get people() { return people; }, get van() { return van; }, cam, R, THREE};
+window.__T3 = {get flo() { return flo.length; }, get hits() { return hits.concat(prHits); }, get people() { return people; }, get van() { return van; }, cam, R, THREE};
 </script>
 </body></html>
