@@ -183,7 +183,7 @@ const CL=[ // крупные клиенты: 3 задачи → постоянн
   {n:'Космос',d:'кронштейны для спутника',t:[['Скорость печати 15 ур.',()=>S.up.speed||0,15],['Брак 2%',()=>S.up.cal||0,8],['Доход 5 000 ₽/с',()=>S.rate,5000]],r:[8e7,.1,150]}]];
 const ORD=['Сувениры для выставки','Брелоки для вендинга','Фигурки к Новому году','Партия для автосервиса','Подарки для корпоратива','Мерч для блогера'];
 const FAULT=['Спагетти','Засор хотенда','Отлип стол','Застряла нить в AMS'];
-const KEY='printls_tycoon',VER=11; // ключ больше не меняется; формат — по полю ver и миграциям
+const KEY='printls_tycoon',VER=12; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
 let S, acc={i:0,w:0,e:0,p:0}, accT=0, accN=0;
@@ -276,7 +276,7 @@ const qb=k=>S.qb[k]||(S.qb[k]={});
 function qPut(k,b){const n=bN(b);bMix(qb(k),b);S.q[k]+=n;return n}
 function qTake(k,n){n=Math.floor(Math.min(n,S.q[k]));const o=bTake(qb(k),n);S.q[k]-=bN(o);return o}
 // что печатает принтер: задание его стеллажа или основное изделие
-const prodOf=i=>{const r=S.rk[i/6|0];return r!=null&&S.unl[r]?r:S.prod};
+const prodOf=i=>{const r=S.rk[i/3|0];return r!=null&&S.unl[r]?r:S.prod}; // задание полки: 3 принтера
 const PX=x=>PR[x.pi!=null?x.pi:S.prod];
 function restart(x,i){if(x.st==='fail')S.cf=(S.cf||0)+1;if(i==null)i=S.pr.indexOf(x);x.pi=prodOf(i);const g=PR[x.pi].g;x.p=0;x.ft=0;if(S.pl>=g){S.pl-=g;x.st='run'}else x.st='nopl'}
 // снять стол можно, только если на первом участке есть место
@@ -467,6 +467,7 @@ const skipCost=()=>S.build?Math.max(1,Math.ceil((S.build.end-Date.now())/60000/B
 // старые сохранения: v6 и v7 совместимы по изделиям; более ранние — другая экономика, их не тянем
 const OLDC=[40000,800000,12e6,1.8e9,110e9,110e9],NEWC=[20000,250000,2.5e6,20e6,200e6,200e6]; // цены следующего переезда до/после перехода на рубли
 const MIG={6:s=>{s.ag={op:[],pack:[],ship:[]};return s},7:s=>s,
+  11:s=>{const o=s.rk||[];s.rk=[];o.forEach((v,r)=>{s.rk[2*r]=v;s.rk[2*r+1]=v});return s}, // задания стеллажей → задания полок
   10:s=>{const pi=s.prod||0;s.qb={};for(const k of ['otk','pack','ship'])s.qb[k]=s.q&&s.q[k]?{[pi]:s.q[k]}:{};
     if(s.ag)for(const k of ['op','pack','ship'])for(const a of s.ag[k]||[])a.b=a.c?{[pi]:a.c}:{};s.rk=[];s.mp={};return s},
   9:s=>{s.eco=0;return s}, // эконом включался сам из-за утечки «+₽» — один раз возвращаем полную графику
@@ -626,10 +627,10 @@ function view(){
    stages().map(stageCard).join('')+(S.loc<OTK_LV?`<div class="card sub">🔍 ОТК пока нет: ${Math.round(defect()*100)}% деталей клиенты возвращают. Участок ОТК откроется в «${LOC[OTK_LV].n}», а пока снижай брак калибровкой.</div>`:'')+
    `<div class="card"><h3>💰 Бухгалтерия <span class="sub">за минуту</span></h3><div class="sub" data-u="dem" style="margin-bottom:6px"></div><div data-u="acc"></div><div class="sub" style="margin-top:6px">«${p.n}» — ${fm(p.p*pm())} за штуку · брака всего <span data-u="rej"></span> шт</div></div>`;
   if(tab==='shop'){let h='<h3>Принтеры</h3>';
+   if(full)h+='<div class="card" style="border:1px solid var(--ac)">'+(S.racks*6<Lc().max?'📦 Места на стеллажах кончились — купи новый стеллаж во вкладке «Цех».':'🏠 В «'+Lc().n+'» помещается только <b>'+Lc().max+' '+pl3(Lc().max,'принтер','принтера','принтеров')+'</b> — это предел площадки (розетки, место), а не стеллажа. Дальше — переезд во вкладке «Рост» или замена слабых принтеров на новые.')+'</div>';
    PT.forEach((t,i)=>{const c=pcost(i),repl=full&&S.pr.some(x=>x.t<i),lk=t.lv>S.loc;
     h+=`<div class="card row"><div class="grow"><b>${t.n}</b> <span class="tag">×${S.cnt[i]||0}</span><div class="sub">скорость ×${t.sp} · ${fm(p.p*pm()*t.sp*spd()/p.t*60)}/мин на «${p.n}»</div></div>
     ${lk?lockTxt(t.lv):`<button class="btn" data-a="buyp" data-i="${i}" data-c="${c}" ${full&&!repl?'disabled data-lock':''}>${repl?'Заменить худший · ':''}${fm(c)}</button>`}</div>`});
-   if(full)h+='<div class="sub" style="margin:-4px 0 10px">'+(S.racks*6<Lc().max?'Места кончились: купи стеллаж в «Цехе» или меняй слабые принтеры на новые.':'Площадка заполнена: переезд во вкладке «Рост» или меняй слабые принтеры на новые.')+'</div>';
    h+='<h3 style="margin-top:14px">Что печатаем</h3>';
    PR.forEach((x,i)=>{const on=S.unl[i],lk=x.lv>S.loc;if(x.lv>S.loc+1)return;
     h+=`<div class="card row${i===S.prod?' sel':''}"><div class="grow"><b>${x.n}</b> <span class="tag">${x.m}</span><div class="sub">${fm(x.p*pm())} за шт · ${x.t} с · ${x.g} г · ${fm(x.p*pm()/x.t*60)}/мин с Ender</div></div>
@@ -701,7 +702,7 @@ const A={
   bprod:i=>{const b=S.board[+i];if(b&&S.unl[b.p]){S.prod=b.p;toast('🖨 Печатаем «'+PR[b.p].n+'»')}},
   imp:()=>{const n=impN(),c=impC();if(n<4&&S.money>=c){spend(c);S.imp++;sound('coin');toast('🔨 '+IMP[S.loc][n]+': +'+Math.round(IMP_B*100)+'% к цене навсегда')}},
   ns:()=>{S.ns=S.ns?0:1;toast(S.ns?'🌙 Ночная смена включена: ночью все работают, ночные часы ×2 к зарплате':'🌙 Ночная смена выключена: ночью люди дома')},
-  rk:(v,el)=>{const r=+el.dataset.r;S.rk[r]=v===''?null:+v;toast('🗄 Стеллаж '+(r+1)+': '+(v===''?'основное изделие':'«'+PR[+v].n+'»')+' — со следующего стола')},
+  rk:(v,el)=>{const r=+el.dataset.r;S.rk[r]=v===''?null:+v;toast('🗄 Стеллаж '+((r>>1)+1)+', '+(r%2?'верхняя':'нижняя')+' полка: '+(v===''?'основное изделие':'«'+PR[+v].n+'»')+' — со следующего стола')},
   dqc:i=>{const x=S.dq&&S.dq.q[+i];if(!x||x.cl||dqGot(x)<x.need)return;x.cl=1;const g=Math.max(500,S.rate*300);earn(g,1);S.gems+=3;sound('coin');toast('📅 Задание выполнено: +'+fm(g)+' и 💎 3');
     if(!S.dq.all&&S.dq.q.every(y=>y.cl)){S.dq.all=1;S.gems+=10;toast('🏆 Все задания дня — 💎 +10')}},
   game:k=>{if((S.gcd[k]||0)>0){toast('🎮 Эту игру можно снова через '+dur(S.gcd[k]));return}startGame(k)},
@@ -719,9 +720,10 @@ document.addEventListener('change',e=>{const el=e.target.closest('select[data-a]
 document.addEventListener('visibilitychange',()=>{if(document.hidden)save()});
 // стеллажи: у каждого своё изделие (или основное)
 function rackCard(){const opts=PR.map((x,i)=>S.unl[i]?i:-1).filter(i=>i>=0);if(opts.length<2)return'';
-  const rows=[...Array(S.racks)].map((_,r)=>{const v=S.rk[r];return `<div class="row" style="margin-top:6px"><div class="grow">Стеллаж ${r+1}</div><select data-a="rk" data-r="${r}" style="background:#1b2333;color:#fff;border:1px solid #2b3549;border-radius:8px;padding:6px;max-width:60%">
+  const n=Math.ceil(Math.min(S.racks*6,Lc().max)/3);
+  const rows=[...Array(n)].map((_,r)=>{const v=S.rk[r];return `<div class="row" style="margin-top:6px"><div class="grow">Стеллаж ${(r>>1)+1} · ${r%2?'верхняя':'нижняя'} полка</div><select data-a="rk" data-r="${r}" style="background:#1b2333;color:#fff;border:1px solid #2b3549;border-radius:8px;padding:6px;max-width:60%">
     <option value=""${v==null?' selected':''}>основное · ${P().n}</option>${opts.map(i=>`<option value="${i}"${v===i?' selected':''}>${PR[i].n}</option>`).join('')}</select></div>`}).join('');
-  return `<details class="card"${S.racks<=4?' open':''}><summary><b>🗄 Стеллажи — что печатать</b> <span class="sub">· можно держать разные заказы на разных стеллажах</span></summary>${rows}</details>`}
+  return `<details class="card"${S.racks<=2?' open':''}><summary><b>🗄 Полки — что печатать</b> <span class="sub">· на каждой полке 3 принтера, у каждой полки может быть своё изделие и свой заказ</span></summary>${rows}</details>`}
 // ---------- мини-игры: короткие, по желанию, за бонус ----------
 function startGame(k){const box=document.createElement('div');box.className='modal';box.id='mg';document.body.appendChild(box);
   const end=(win,msg)=>{clearInterval(box._t);S.gcd[k]=300;box.innerHTML='<div class="card" style="text-align:center"><h3>'+(win?'🎉 ':'😕 ')+msg+'</h3><button class="btn" id="mgok">OK</button></div>';
