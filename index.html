@@ -80,7 +80,11 @@ const BAL={
   train:{op:250,pack:200,ship:500,otk:5e6}, trainF:1.65, // обучение: +30% скорости
   wage:{op:.026,pack:.023,ship:.017,otk:.04},       // ₽/с на человека — доля цены лучшего открытого изделия (сдельная ставка)
   wageLoc:[1,1,1,1,1,1], wageLv:1.27,              // поправка по площадкам; обученный просит +27% за уровень
-  rate:{op:.5,pack:.45,ship:.35,otk:1.5},            // шт/с на человека
+  rate:{otk:1.5},                                    // ОТК: шт/с на контролёра (стоит у стола)
+  walk:{op:1.6,pack:1.4}, walkLv:1.1,               // шаг, ед./с; обучение +10% к шагу
+  cap:{op:3,pack:5,ship:12}, capLv:{op:2,pack:2,ship:6}, // сколько уносит за раз (тележка); обучение добавляет
+  load:.25, packT:.6,                               // взять/положить деталь, упаковать одну, с
+  road:[8,9,10,11,12,13], roadNight:1.5,          // рейс фургона туда-обратно по площадкам, с; ночью дольше
   manual:3,                                          // тап по столу обрабатывает столько штук
   elec:.07,                                          // свет: доля цены лучшего изделия за его время печати
   night:.35,                                         // ночью доставка работает на 35%
@@ -159,20 +163,20 @@ const CL=[ // крупные клиенты: 3 задачи → постоянн
   {n:'Школа робототехники',d:'детали для наборов',t:[['Найми ремонтника',()=>S.mg.tech?1:0,1],['Обучи упаковку до 3 ур.',()=>S.team.pack.lv,3],['Доход 400 ₽/с',()=>S.rate,400]],r:[5e4,.05,20]},
   {n:'Блогер-косплеер',d:'реквизит для съёмок',t:[['2 курьера',()=>tm('ship'),2],['Калибровка 2 ур.',()=>S.up.cal||0,2],['Сделай 10 000 деталей',()=>S.made,1e4]],r:[8e4,.1,30]}],
  [{n:'Сеть кофеен',d:'брендированные подставки',t:[['Поставь 15 принтеров',()=>S.pr.length,15],['Открой «Корпус лампы»',()=>S.unl[ui('Корпус лампы')]?1:0,1],['Доход 3 000 ₽/с',()=>S.rate,3e3]],r:[3e6,.05,25]},
-  {n:'Мебельная фабрика',d:'фурнитура мелкими партиями',t:[['Найми снабженца',()=>S.mg.sup?1:0,1],['4 упаковщика',()=>tm('pack'),4],['Сделай 60 000 деталей',()=>S.made,6e4]],r:[5e6,.05,25]},
-  {n:'Вендинговые автоматы',d:'игрушки в автоматы',t:[['Купи ИБП',()=>S.up.ups||0,1],['Расширь доставку 3 раза',()=>S.qc.ship,3],['Сделай 50 000 деталей',()=>S.made,5e4]],r:[8e6,.1,35]}],
+  {n:'Мебельная фабрика',d:'фурнитура мелкими партиями',t:[['Найми снабженца',()=>S.mg.sup?1:0,1],['4 упаковщика',()=>tm('pack'),4],['Сделай 40 000 деталей',()=>S.made,4e4]],r:[5e6,.05,25]},
+  {n:'Вендинговые автоматы',d:'игрушки в автоматы',t:[['Купи ИБП',()=>S.up.ups||0,1],['Расширь доставку 3 раза',()=>S.qc.ship,3],['Сделай 30 000 деталей',()=>S.made,3e4]],r:[8e6,.1,35]}],
  [{n:'Автосервис',d:'кронштейны и клипсы',t:[['Поставь 40 принтеров',()=>S.pr.length,40],['Открой «Кронштейн PETG-CF»',()=>S.unl[ui('Кронштейн PETG-CF')]?1:0,1],['Доход 150 тыс ₽/с',()=>S.rate,1.5e5]],r:[5e7,.05,30]},
   {n:'Магазин запчастей',d:'запчасти к принтерам',t:[['Конвейер 2 ур.',()=>S.up.conv||0,2],['8 курьеров',()=>tm('ship'),8],['Сделай 800 тыс деталей',()=>S.made,8e5]],r:[8e7,.05,30]},
   {n:'Ивент-агентство',d:'декор для выставок',t:[['Найми ИИ-дрон',()=>S.mg.ai?1:0,1],['Камеры 3 ур.',()=>S.up.cam||0,3],['Сделай 600 тыс деталей',()=>S.made,6e5]],r:[1.2e8,.1,40]}],
  [{n:'Производитель дронов',d:'корпуса серией',t:[['Поставь 120 принтеров',()=>S.pr.length,120],['Открой «Корпус дрона CF»',()=>S.unl[ui('Корпус дрона CF')]?1:0,1],['Доход 11 млн ₽/с',()=>S.rate,1.1e7]],r:[1e9,.05,40]},
-  {n:'Федеральная сеть',d:'нужен стабильный брак ниже 3%',t:[['5 контролёров ОТК',()=>tm('otk'),5],['Калибровка 6 ур.',()=>S.up.cal||0,6],['Сделай 26 млн деталей',()=>S.made,2.6e7]],r:[2e9,.05,40]},
-  {n:'Госзаказ',d:'большая партия по тендеру',t:[['Сервер Printls',()=>S.mg.srv?1:0,1],['Расширь ОТК 4 раза',()=>S.qc.otk,4],['Сделай 23 млн деталей',()=>S.made,2.3e7]],r:[3e9,.1,60]}],
- [{n:'Экспорт',d:'поставки за рубеж',t:[['Поставь 250 принтеров',()=>S.pr.length,250],['Доход 12 млн ₽/с',()=>S.rate,1.2e7],['Сделай 50 млн деталей',()=>S.made,5e7]],r:[5e9,.1,80]},
+  {n:'Федеральная сеть',d:'нужен стабильный брак ниже 3%',t:[['5 контролёров ОТК',()=>tm('otk'),5],['Калибровка 6 ур.',()=>S.up.cal||0,6],['Сделай 7 млн деталей',()=>S.made,7e6]],r:[2e9,.05,40]},
+  {n:'Госзаказ',d:'большая партия по тендеру',t:[['Сервер Printls',()=>S.mg.srv?1:0,1],['Расширь ОТК 4 раза',()=>S.qc.otk,4],['Сделай 6 млн деталей',()=>S.made,6e6]],r:[3e9,.1,60]}],
+ [{n:'Экспорт',d:'поставки за рубеж',t:[['Поставь 250 принтеров',()=>S.pr.length,250],['Доход 12 млн ₽/с',()=>S.rate,1.2e7],['Сделай 15 млн деталей',()=>S.made,1.5e7]],r:[5e9,.1,80]},
   {n:'Автоконцерн',d:'серийные детали',t:[['5 промышленных',()=>S.cnt[7]||0,5],['Конвейер 8 ур.',()=>S.up.conv||0,8],['40 курьеров',()=>tm('ship'),40]],r:[8e9,.1,80]},
   {n:'Космос',d:'кронштейны для спутника',t:[['Скорость печати 30 ур.',()=>S.up.speed||0,30],['Брак 1%',()=>S.up.cal||0,7],['Доход 30 млн ₽/с',()=>S.rate,3e7]],r:[2e10,.2,150]}]];
 const ORD=['Сувениры для выставки','Брелоки для вендинга','Фигурки к Новому году','Партия для автосервиса','Подарки для корпоратива','Мерч для блогера'];
 const FAULT=['Спагетти','Засор хотенда','Отлип стол','Застряла нить в AMS'];
-const KEY='printls_tycoon_v6';
+const KEY='printls_tycoon_v7';
 
 // ---------- состояние ----------
 let S, acc={i:0,w:0,e:0,p:0}, accT=0;
@@ -180,7 +184,7 @@ const role=()=>({n:0,pl:0,lv:0,a:0});
 const fresh=(rep=0,all=0,best=0)=>({money:40,gems:0,run:0,all,best,rep,loc:0,racks:1,pr:[{t:0,p:0,st:'run',ft:0}],cnt:[1],prod:0,unl:[true],pl:1500,
   q:{otk:0,pack:0,ship:0},qc:{otk:0,pack:0,ship:0},team:{op:role(),pack:role(),ship:role(),otk:role()},mg:{},up:{},
   cl:{},cb:0,build:null,gt:0,daily:null,boostT:0,boostCD:0,offer:null,emT:0,lowpl:0,snd:1,eco:0,broke:0,
-  order:null,board:[],imp:0,impB:0,out:0,ev:90,last:Date.now(),rate:0,exp:0,stat:{i:0,w:0,e:0,p:0},made:0,rej:0,intro:false,t0:Date.now()});
+  order:null,board:[],ag:{op:[],pack:[],ship:[]},imp:0,impB:0,out:0,ev:90,last:Date.now(),rate:0,exp:0,stat:{i:0,w:0,e:0,p:0},made:0,rej:0,intro:false,t0:Date.now()});
 
 // ---------- формулы ----------
 const P=()=>PR[S.prod];
@@ -202,8 +206,34 @@ const topV=()=>PR[topI()].p*Lc().m*(1+S.cb)*(1+.05*(S.up.ams||0)); // рынок
 const wageOf=k=>BAL.wage[k]*topV()*BAL.wageLoc[S.loc]*Math.pow(BAL.wageLv,S.team[k].lv)*(1+.2*(S.up.conv||0));
 const elecK=()=>BAL.elec*topV()*spd()/PR[topI()].t; // ₽/с за единицу скорости работающего принтера
 const wages=()=>roles().reduce((a,k)=>a+S.team[k].n*wageOf(k),0);
-// шт/с участка с людьми: ночью курьеры работают слабее, без зарплаты — вполсилы
-const sr=k=>S.team[k].n*BAL.rate[k]*Math.pow(1.3,S.team[k].lv)*(1+.25*(S.up.conv||0))*(k==='ship'&&night()?BAL.night:1)*(S.broke?.5:1);
+// ---------- раскладка цеха: одна на логику и 3D ----------
+let LAY=null,layK='';
+function lay(){const th=Lc().th,k=S.racks+':'+th;if(LAY&&layK===k)return LAY;layK=k;
+  const VR=Math.min(S.racks,th>=2?18:12),cols=VR<=4?2:3,rows=Math.ceil(VR/cols),W=.5+cols*1.9+.2,hz=.5+rows*1.5,z0=hz+.45;
+  const L={VR,cols,rows,W,hz,z0,H:z0+2.7,otk:.3,pack:Math.max(1.95,W/2-.3),dock:W-1.9};
+  L.drop={otk:[L.otk+.57,z0-.15],pack:[L.pack+.57,z0-.15]}; // куда оператор кладёт детали (северный край стола)
+  L.sPack=[L.pack+.57,z0+.95];L.sDock=[L.dock-.3,z0+1.25]; // где стоит упаковщик и куда носит коробки
+  return LAY=L}
+const rp=r=>{const L=lay();return [.5+(r%L.cols)*1.9,.5+(r/L.cols|0)*1.5]}; // угол стеллажа
+// точка перед принтером; принтеры за кадром стоят «как бы» на видимых стеллажах
+const FRM=new Map(); // точки у принтеров, кэш по раскладке
+const front=i=>{const L=lay();let FR=FRM.get(layK);if(!FR)FRM.set(layK,FR=[]);if(FR[i])return FR[i];const r=(i/6|0)%L.VR,j=i%6,[rx,rz]=rp(r);return FR[i]=[rx+.22+(j%3)*.39,rz+.85]};
+// маршрут по проходам: вдоль ряда, потом по левому проходу x=.22, потом вдоль ряда к цели
+const route=(a,b)=>Math.abs(a[1]-b[1])<.05?[b]:[[.22,a[1]],[.22,b[1]],b];
+const plen=(a,pts)=>{let d=0,c=a;for(const q of pts){d+=Math.abs(q[0]-c[0])+Math.abs(q[1]-c[1]);c=q}return d};
+const vOf=k=>BAL.walk[k]*Math.pow(BAL.walkLv,S.team[k].lv)*(1+.25*(S.up.conv||0))*(S.broke?.5:1);
+const capOf=k=>BAL.cap[k]+BAL.capLv[k]*S.team[k].lv;
+const road=()=>BAL.road[S.loc]*(night()?BAL.roadNight:1)/(1+.1*(S.up.conv||0));
+const OPT=new Map(); // средний рейс оператора туда-обратно — для офлайна и подсказок; кэш по раскладке
+function opTrip(){const L=lay(),k=layK+':'+stages()[0]+':'+Math.min(L.VR*6,S.pr.length);if(OPT.has(k))return OPT.get(k);let opD;const t=L.drop[stages()[0]];let d=0;const n=Math.min(L.VR*6,Math.max(1,S.pr.length));
+  for(let i=0;i<n;i++){const f=front(i);d+=plen(t,route(t,f))+plen(f,route(f,t))}opD=d/n;OPT.set(k,opD);return opD}
+// шт/с участка: считается из тех же шагов, грузов и рейсов, что делают человечки
+const sr=k=>{const r=S.team[k],n=r.n;if(!n)return 0;
+  if(k==='otk')return n*BAL.rate.otk*Math.pow(1.3,r.lv)*(1+.25*(S.up.conv||0))*(S.broke?.5:1);
+  const c=capOf(k);
+  if(k==='op')return n*c/(c*BAL.load*2+opTrip()/vOf('op'));
+  if(k==='pack'){const L=lay();return n*c/(c*(BAL.packT+BAL.load)+2*plen(L.sPack,[L.sDock])/vOf('pack'))}
+  return n*c/(c*BAL.load+road())};
 const maxPr=()=>Math.min(S.racks*6,Lc().max);
 const pcost=t=>PT[t].c*Math.pow(BAL.pcF,S.cnt[t]||0);
 const rcost=()=>500*Math.pow(Math.max(1,S.racks),BAL.rackF); // стеллаж на 6 мест: степенной рост — места на больших площадках достаются постепенно
@@ -227,17 +257,64 @@ function spend(c,kind){S.money-=c;if(kind)acc[kind]+=c}
 function restart(x){x.p=0;x.ft=0;if(S.pl>=P().g){S.pl-=P().g;x.st='run'}else x.st='nopl'}
 // снять стол можно, только если на первом участке есть место (с допуском на дробные хвосты вроде 19,0000000004)
 function clear(x){const f=stages()[0];if(S.q[f]+1>qcap(f)+1e-6)return false;S.q[f]+=1;S.made++;restart(x);return true}
+// ручная работа (тап по столу): игрок переносит до n деталей на следующий стол; ОТК бракует поштучно
 function proc(k,n){
-  const sg=stages(),i=sg.indexOf(k),nx=sg[i+1];if(i<0)return 0;
-  n=Math.min(n,S.q[k]);if(nx)n=Math.min(n,qcap(nx)-S.q[nx]);if(n<=0)return 0;S.q[k]-=n;
-  if(k==='otk'){S.q[nx]+=n*(1-defect());S.rej+=n*defect()}
-  else if(nx)S.q[nx]+=n;
-  else{ // доставка: до ОТК часть деталей возвращают — брак уходит клиенту
-    const ok=S.loc>=OTK_LV?n:n*(1-defect());if(S.loc<OTK_LV)S.rej+=n-ok;
-    const g=ok*P().p*pm();earn(g);sound('coin');VIS.ship+=n;VIS.cash+=g;const o=S.order;
-    for(const b of S.board)if(b.p===S.prod&&b.got<b.need){b.got=Math.min(b.need,b.got+ok);if(b.got>=b.need)toast('📋 Заказ «'+b.n+'» готов — забери награду')}
-    if(o){o.got+=n;if(o.got>=o.need){earn(o.bonus,1);S.gems+=1;toast('🏆 Заказ «'+o.n+'» выполнен! Бонус +'+fm(o.bonus)+' и 💎 1');S.order=null}}}
+  const sg=stages(),i=sg.indexOf(k),nx=sg[i+1];if(i<0||!nx)return 0;
+  n=Math.floor(Math.min(n,S.q[k],qcap(nx)-S.q[nx]));if(n<=0)return 0;S.q[k]-=n;
+  if(k==='otk')for(let j=0;j<n;j++){if(Math.random()<defect())S.rej++;else S.q[nx]++}
+  else S.q[nx]+=n;
   return n}
+// фургон уехал с грузом: деньги и заказы; до ОТК часть деталей клиенты возвращают
+function deliver(n){if(n<=0)return;
+  {const ok=S.loc>=OTK_LV?n:Math.round(n*(1-defect()));if(S.loc<OTK_LV)S.rej+=n-ok;
+    const g=ok*P().p*pm();earn(g);sound('coin');VIS.cash+=g;const o=S.order;
+    for(const b of S.board)if(b.p===S.prod&&b.got<b.need){b.got=Math.min(b.need,b.got+ok);if(b.got>=b.need)toast('📋 Заказ «'+b.n+'» готов — забери награду')}
+    if(o){o.got+=n;if(o.got>=o.need){earn(o.bonus,1);S.gems+=1;toast('🏆 Заказ «'+o.n+'» выполнен! Бонус +'+fm(o.bonus)+' и 💎 1');S.order=null}}}}
+// ---------- люди-агенты: всё, что видно на экране, и есть расчёт ----------
+function walkTo(a,dt,v){while(a.path.length&&dt>0){const [tx,tz]=a.path[0],d=Math.hypot(tx-a.x,tz-a.z),s=v*dt;
+    if(d<=s){a.x=tx;a.z=tz;a.path.shift();dt-=d/v}else{a.x+=(tx-a.x)/d*s;a.z+=(tz-a.z)/d*s;dt=0}}return !a.path.length}
+let DONE=[];const AGV=8; // столько людей каждого участка ходит по цеху; остальные — за кадром, с той же выработкой
+const dist=(a,b)=>Math.abs(a[1]-b[1])<.05?Math.abs(a[0]-b[0]):Math.abs(a[0]-.22)+Math.abs(a[1]-b[1])+Math.abs(b[0]-.22);
+function syncAg(){const L=lay();
+  const fit=(arr,n,mk)=>{while(arr.length<n)arr.push(mk());while(arr.length>n){const a=arr.pop();if(a.c&&a.k==='op')S.q[stages()[0]]=Math.min(qcap(stages()[0]),S.q[stages()[0]]+a.c)}};
+  fit(S.ag.op,Math.min(AGV,S.team.op.n),()=>({k:'op',x:L.drop[stages()[0]][0],z:L.drop[stages()[0]][1],path:[],tg:[],c:0,w:0,st:'idle'}));
+  fit(S.ag.pack,Math.min(AGV,S.team.pack.n),()=>({k:'pack',x:L.sPack[0],z:L.sPack[1],path:[],c:0,w:0,t:0,st:'pack'}));
+  fit(S.ag.ship,Math.max(1,Math.min(AGV,S.team.ship.n)),()=>({st:'dock',t:0,c:0,idle:0}))}
+// оператор: выбирает ближайшие готовые принтеры (сколько влезет в тележку), собирает, несёт на первый стол
+function stepOp(a,dt){if(a.w>0){a.w-=dt;return}const f=stages()[0],tb=lay().drop[f],v=vOf('op');
+  if(a.st==='idle'){if(!DONE.length)return;const busy=new Set();for(const b of S.ag.op)for(const i of b.tg)busy.add(i);
+    let cur=[a.x,a.z];const pick=[];
+    for(let n=capOf('op');n>0;n--){let bi=-1,bd=1e9;for(const i of DONE){if(busy.has(i)||pick.includes(i))continue;const d=dist(cur,front(i));if(d<bd){bd=d;bi=i}}
+      if(bi<0)break;pick.push(bi);cur=front(bi)}
+    if(!pick.length)return;a.tg=pick;a.path=route([a.x,a.z],front(pick[0]));a.st='go'}
+  if(!walkTo(a,dt,v))return;
+  if(a.st==='go'){const i=a.tg.shift(),x=S.pr[i];if(x&&x.st==='done'){a.c++;S.made++;restart(x);a.w=BAL.load}
+    if(a.tg.length)a.path=route([a.x,a.z],front(a.tg[0]));else if(a.c){a.path=route([a.x,a.z],tb);a.st='back'}else a.st='idle';return}
+  if(a.st==='back'||a.st==='wait'){const n=Math.min(a.c,Math.floor(qcap(f)-S.q[f]+1e-6));if(n>0){S.q[f]+=n;a.c-=n;a.w=BAL.load*n}
+    a.st=a.c?'wait':'idle'}} // стол забит — стоит с грузом и ждёт: узкое место видно глазами
+// упаковщик: пакует у стола до полной тележки, везёт коробки к фургону
+function stepPack(a,dt){if(a.w>0){a.w-=dt;return}const L=lay(),v=vOf('pack'),c=capOf('pack');
+  if(a.st==='pack'){if(a.c<c&&S.q.pack>=1){a.t+=dt;if(a.t>=BAL.packT){a.t=0;S.q.pack-=1;a.c++}return}
+    if(a.c&&(a.c>=c||S.q.pack<1)){a.path=[L.sDock];a.st='go'}return}
+  if(!walkTo(a,dt,v))return;
+  if(a.st==='go'||a.st==='wait'){const n=Math.min(a.c,Math.floor(qcap('ship')-S.q.ship+1e-6));if(n>0){S.q.ship+=n;a.c-=n;a.w=BAL.load*n}
+    if(a.c)a.st='wait';else{a.path=[L.sPack];a.st='ret'}return}
+  if(a.st==='ret')a.st='pack'}
+// фургон: грузит со склада у ворот, уезжает полным (или если ждать больше нечего), деньги — при отправке
+function depart(f){const n=Math.min(f.c,capOf('ship'));f.c=0;f.st='road';f.t=f.T=road();deliver(n)}
+function stepVan(f,i,dt){if(f.st==='road'){f.t-=dt;if(f.t<=0){f.st='dock';f.t=0}return}
+  if(i>=S.team.ship.n)return; // без курьера фургон стоит, пока игрок не тапнет
+  const c=capOf('ship');if(f.c<c&&S.q.ship>=1){f.t+=dt*(S.broke?.5:1);f.idle=0;if(f.t>=BAL.load){f.t=0;S.q.ship-=1;f.c++}}else f.idle+=dt;
+  if(f.c>=c||f.c>0&&f.idle>3)depart(f)}
+// люди за кадром: та же выработка на человека, что у видимых, без хождения по сцене
+function offScreen(dt){const f=stages()[0];
+  for(const k of ['op','pack','ship']){const r=S.team[k],e=r.n-AGV;if(e<=0){r.a=0;continue}
+    r.a=Math.min(r.a+sr(k)/r.n*e*dt,capOf(k)*e);
+    if(k==='op'&&r.a>=1){const busy=new Set();for(const b of S.ag.op)for(const i of b.tg)busy.add(i);
+      for(let i=0;i<S.pr.length&&r.a>=1;i++){const x=S.pr[i];if(x.st==='done'&&!busy.has(i)){if(!clear(x))break;r.a-=1}}}
+    if(k==='pack'){const n=Math.floor(Math.min(r.a,S.q.pack,qcap('ship')-S.q.ship));if(n>0){S.q.pack-=n;S.q.ship+=n;r.a-=n}}
+    if(k==='ship'){const n=Math.floor(Math.min(r.a,S.q.ship));if(n>0){S.q.ship-=n;r.a-=n;deliver(n)}}}}
+function tapVan(){const f=S.ag.ship.find(v=>v.st==='dock');if(!f)return 0;const n=Math.min(capOf('ship')-f.c,Math.floor(S.q.ship));S.q.ship-=n;f.c+=n;if(!f.c)return 0;depart(f);return 1}
 // доска заказов: всегда 3 заказа на разные изделия; детали идут в заказ, если печатаем это изделие
 function newOrd(){const ok=PR.map((x,i)=>i).filter(i=>S.unl[i]),nx=PR.findIndex((x,i)=>!S.unl[i]&&x.lv<=S.loc);
   let i=ok[Math.max(0,ok.length-1-(Math.random()*3|0))];if(nx>=0&&Math.random()<.3)i=nx; // иногда просят ещё не открытое
@@ -256,11 +333,10 @@ function tick(dt){
     if(x.st==='run'&&on){x.p+=dt*PT[x.t].sp*sp/p.t;el+=PT[x.t].sp;if(x.p>=1){x.p=1;x.st='done'}}
     if(x.st==='fail'&&(S.mg.ai||S.mg.tech)){x.ft+=dt;if(x.ft>(S.mg.ai?2:8))restart(x)}
   }
-  // операторы снимают столы по своей скорости
-  const op=S.team.op;op.a=Math.min(op.a+sr('op')*dt,S.pr.length);
-  if(op.a>=1)for(const x of S.pr){if(op.a<1)break;if(x.st==='done'){if(!clear(x))break;op.a-=1}}
-  if(op.a>1&&!S.pr.some(x=>x.st==='done'))op.a=1;
-  for(const k of stages())if(S.team[k].n)proc(k,sr(k)*dt);
+  DONE=[];S.pr.forEach((x,i)=>{if(x.st==='done')DONE.push(i)}); // готовые — один проход на такт
+  syncAg();for(const a of S.ag.op)stepOp(a,dt);for(const a of S.ag.pack)stepPack(a,dt);S.ag.ship.forEach((f,i)=>stepVan(f,i,dt));
+  offScreen(dt);
+  if(S.loc>=OTK_LV&&S.team.otk.n){const r=S.team.otk;r.a=Math.min(r.a+sr('otk')*dt,5);while(r.a>=1&&proc('otk',1))r.a-=1} // контролёры стоят у стола
   if(S.mg.sup)supply();
   // расходы: зарплаты и электричество; нечем платить — люди работают вполсилы
   const w=wages()*dt,e=el*elecK()*dt;spend(w,'w');spend(e,'e');
@@ -297,13 +373,17 @@ function event(){
     S.offer={kind:'sale',c:10*plPrice()*.6,left:25};
   }
 }
+// поток без игрока: самое узкое звено цепочки; участок без людей стоит
+const flowOff=()=>Math.min(prodRate(),...['op',...stages()].map(k=>sr(k)));
 function offline(){
   const max=S.mg.srv?8*3600:6*3600,raw=(Date.now()-S.last)/1000,el=Math.min(max,raw);
   if(raw<60){for(let t=raw;t>0;t-=.1)tick(Math.min(.1,t));return} // короткую паузу досчитываем честно, по тикам
   S.gt+=raw;
-  const p=P(),per=p.p*pm()*(1-defect());let g=Math.max(0,S.rate-S.exp)*el*(S.mg.srv?1:.5);
-  if(!S.mg.sup){g=Math.min(g,S.pl/p.g*per);S.pl=Math.max(0,S.pl-g/per*p.g)}
-  if(g>0){S.made+=Math.floor(g/per*S.rate/Math.max(1e-9,S.rate-S.exp)); // штуки считаем по выручке, а не по прибыли
+  const p=P(),per=p.p*pm()*(1-defect()),flow=flowOff(),sum=S.pr.reduce((a,x)=>a+PT[x.t].sp,0),pr=prodRate();
+  let pcs=flow*el*(S.mg.srv?1:.5);if(!S.mg.sup){pcs=Math.min(pcs,S.pl/p.g);S.pl=Math.max(0,S.pl-pcs*p.g)}
+  let g=Math.max(0,pcs*per-(wages()+sum*(pr?flow/pr:0)*elecK())*el*(S.mg.srv?1:.5));
+  if(!flow&&S.made&&typeof modal==='function')modal('😴 Тебя не было '+dur(raw),'Ферма стояла: без людей готовые детали никто не снимает, не пакует и не возит.<br><br>Найми оператора, упаковщика и курьера во вкладке «Люди» — они работают и без тебя.');
+  if(g>0){S.made+=Math.floor(pcs);
     earn(g,1);modal('😴 Тебя не было '+dur(raw),'Ферма заработала <b>'+fm(g)+'</b> (за вычетом зарплат и света)'+(raw>max?'<br><span class="sub">Склад полон: копится не больше '+dur(max)+'</span>':'')+
     (S.mg.srv?'':'<br><span class="sub">Без сервера офлайн 50% и до 6 ч</span>'))}
   if(S.build&&Date.now()>=S.build.end)moved();
@@ -373,6 +453,7 @@ function modal(h,b,btns){if($('mod').innerHTML){MQ.push([h,b,btns]);return}MB=bt
   MB.map((x,i)=>'<button class="btn'+(x.sec?' sec':'')+'" data-a="mb" data-i="'+i+'">'+x.t+'</button>').join('')+'</div></div></div>'}
 let tab='farm',sig='';
 const TABS=[['farm','🖨','Цех'],['chain','🔗','Участки'],['shop','🛒','Магазин'],['team','👥','Люди'],['grow','📈','Рост']];
+const TRN={op:'Обучить: шаг +10%, тележка +1',pack:'Обучить: шаг +10%, тележка +1',ship:'Обучить: фургон +4 места',otk:'Обучить +30%'};
 const lockTxt=lv=>'<span class="tag">🔒 '+LOC[lv].n+'</span>';
 const U={ // живые подписи, обновляются 10 раз в секунду
   pl:()=>(S.pl/1000).toFixed(2).replace('.',',')+' кг '+P().m,
@@ -384,6 +465,7 @@ const U={ // живые подписи, обновляются 10 раз в се
   sr:k=>S.team[k].n?fn(sr(k)*60)+' шт/мин':'вручную',
   rate:()=>fn(prodRate()*60)+' шт/мин',
   rej:()=>fn(S.rej),
+  van:()=>{const a=S.ag.ship,r=a.filter(v=>v.st==='road');return r.length?'🚚 в рейсе '+r.length+' из '+a.length+(r.length===a.length?' · вернётся через '+Math.ceil(Math.min(...r.map(v=>v.t)))+' с':''):'🚚 у ворот'},
   ord:()=>{const o=S.order;if(!o)return'';return '📦 <b>'+o.n+'</b>: '+fn(o.got)+' / '+fn(o.need)+' шт · осталось '+Math.ceil(o.left)+' с · бонус '+fm(o.bonus)+
     '<div class="bar"><i style="width:'+Math.min(100,o.got/o.need*100)+'%"></i></div>'},
   offer:()=>{const o=S.offer;if(!o)return'';const t=' <span class="sub">'+Math.ceil(o.left)+' с</span>';
@@ -411,7 +493,7 @@ const U={ // живые подписи, обновляются 10 раз в се
     <div class="row"><div class="grow">Пластик</div><b class="bad">−${fm(s.p*60)}</b></div><div class="row" style="border-top:1px solid #2b3549;margin-top:4px;padding-top:4px"><div class="grow"><b>Итого за минуту</b></div><b class="${n>=0?'ok':'bad'}">${n>=0?'+':'−'}${fm(Math.abs(n)*60)}</b></div>`},
 };
 function stageCard(k){const f=stages()[0],man=k==='ship'?'🚚':'👆';return `<div class="card"><div class="row"><div class="grow"><h3>${ROLE[k].ic} ${ROLE[k].n} <span class="bad" data-u="bn:${k}"></span></h3>
-  <div class="sub">на столе <b data-u="q:${k}"></b> · <span data-u="sr:${k}"></span>${k==='ship'?' · ночью ×'+String(BAL.night).replace('.',','):''}${k==='otk'?' · брак '+Math.round(defect()*100)+'%':''}</div></div>
+  <div class="sub">${k==='ship'?'у ворот':'на столе'} <b data-u="q:${k}"></b> · <span data-u="sr:${k}"></span>${k==='ship'?' · <span data-u="van"></span>':''}${k==='otk'?' · брак '+Math.round(defect()*100)+'%':''}</div></div>
   <button class="btn sec" data-a="st" data-i="${ST.findIndex(s=>s.k===k)}">${man} ${ST.find(s=>s.k===k).v}</button></div>
   <div class="row" style="margin-top:8px"><div class="grow sub">${S.qc[k]>=Lc().qm?'Стол расширен до предела этой площадки':'Расширить стол: '+qcap(k)+' → '+(qcap(k)+BAL.qStep)+' мест'}</div>
   ${S.qc[k]>=Lc().qm?'<span class="tag">макс</span>':`<button class="btn" data-a="qx" data-i="${k}" data-c="${qcost(k)}">${fm(qcost(k))}</button>`}</div></div><div class="arrow">↓</div>`}
@@ -420,7 +502,7 @@ function roleCard(k){const r=S.team[k],R=ROLE[k],mp=Lc().pl;return `<div class="
   <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:6px">
    ${r.n<r.pl?`<button class="btn" data-a="hire" data-i="${k}" data-c="${hcost(k)}">Нанять ${R.one}а · ${fm(hcost(k))}</button>`:`<span class="sub grow">Нет свободного места — купи ещё</span>`}
    ${r.pl<mp?`<button class="btn sec" data-a="place" data-i="${k}" data-c="${plcost(k)}">+ место · ${fm(plcost(k))}</button>`:`<span class="tag">максимум ${mp} ${pl3(mp,'место','места','мест')}</span>`}
-   ${r.n?`<button class="btn sec" data-a="train" data-i="${k}" data-c="${trcost(k)}">Обучить +30% · ${fm(trcost(k))}</button><button class="btn sec" data-a="fire" data-i="${k}">Уволить</button>`:''}
+   ${r.n?`<button class="btn sec" data-a="train" data-i="${k}" data-c="${trcost(k)}">${TRN[k]} · ${fm(trcost(k))}</button><button class="btn sec" data-a="fire" data-i="${k}">Уволить</button>`:''}
   </div></div>`}
 function view(){
   const p=P(),full=S.pr.length>=maxPr();
@@ -489,7 +571,8 @@ const A={
     else if(x.st==='run'){x.p+=.08;if(x.p>=1){x.p=1;x.st='done'}}else if(x.st==='nopl')toast('🧵 Нет пластика — купи катушку')},
   clrall:()=>{for(const x of S.pr)if(x.st==='done'&&!clear(x)){A.p(S.pr.indexOf(x));break}},
   spool:i=>{const c=+i===10?plPrice()*8.7:plPrice();if(S.money>=c){spend(c,'p');S.pl+=i*1000}},
-  st:i=>{const k=ST[i].k;if(!stages().includes(k)){toast('🔍 ОТК откроется в «'+LOC[OTK_LV].n+'»');return}proc(k,BAL.manual)},
+  st:i=>{const k=ST[i].k;if(!stages().includes(k)){toast('🔍 ОТК откроется в «'+LOC[OTK_LV].n+'»');return}
+    if(k==='ship'){if(!tapVan()&&performance.now()-fullT>2000){fullT=performance.now();toast(S.ag.ship.some(v=>v.st==='dock')?'🚚 Грузить нечего — сначала упакуй':'🚚 Фургон в рейсе — вернётся через '+Math.ceil(Math.min(...S.ag.ship.map(v=>v.t)))+' с')}return}proc(k,BAL.manual)},
   qx:k=>{const c=qcost(k);if(S.money>=c&&S.qc[k]<Lc().qm){spend(c);S.qc[k]++;toast('📐 Стол «'+ROLE[k].n+'»: теперь '+qcap(k)+' мест')}},
   hire:k=>{const r=S.team[k],c=hcost(k);if(S.money>=c&&r.n<r.pl){spend(c);r.n++;toast('👤 '+ROLE[k].one[0].toUpperCase()+ROLE[k].one.slice(1)+' в штате. Зарплата '+fm(wageOf(k)*60)+'/мин')}},
   place:k=>{const r=S.team[k],c=plcost(k);if(S.money>=c&&r.pl<Lc().pl){spend(c);r.pl++}},
@@ -663,14 +746,10 @@ function person(k) {
 
 // ---------- сборка мира ----------
 let LS = 1, conv = [], world = null, L = null, built = '', printers = [], hits = [], people = {}, zones = {}, van = null, drone = null, server = null, flo = [];
-const rackPos = r => [.5 + (r % L.cols) * 1.9, .5 + (r / L.cols | 0) * 1.5];
-function layout() {
-  const VR = Math.min(S.racks, TH() >= 2 ? 18 : 12), cols = VR <= 4 ? 2 : 3, rows = Math.ceil(VR / cols), W = .5 + cols * 1.9 + .2, hz = .5 + rows * 1.5, z0 = hz + .45;
-  return {VR, cols, rows, W, hz, z0, H: z0 + 2.7, otk: .3, pack: Math.max(1.95, W / 2 - .3), dock: W - 1.9};
-}
+const rackPos = rp; // раскладка общая с логикой: lay() и rp() из основного скрипта
 function build() {
   if (world) scene.remove(world);
-  world = new THREE.Group(); scene.add(world); L = layout(); LS = Math.max(1, Math.max(L.W, L.H) / 7); printers = []; hits = []; people = {}; flo = []; conv = [];
+  world = new THREE.Group(); scene.add(world); L = lay(); LS = Math.max(1, Math.max(L.W, L.H) / 7); printers = []; hits = []; people = {}; flo = []; conv = [];
   R.shadowMap.enabled = !S.eco; R.setPixelRatio(S.eco ? 1 : Math.min(2, window.devicePixelRatio || 1)); sun.castShadow = !S.eco;
   const th = THEME[TH()];
   // пол: плитка, у фургона асфальт
@@ -733,8 +812,7 @@ function build() {
   const vh = new THREE.Mesh(G(1.5, .9, .8), new THREE.MeshBasicMaterial({visible: false})); vh.userData.zone = 2; van.g.add(vh); vh.position.set(.6, .4, 0); hits.push(vh);
   zones[2] = {lb: label('', false)}; zones[2].lb.position.set(.6, 1.05, 0); van.g.add(zones[2].lb); // подпись едет вместе с фургоном
   // люди
-  people.op = person('m1'); people.otk = person('f1'); people.pk = person('m2'); people.cr = person('f2');
-  Object.assign(people.op, {x: .25, z: L.z0 - .2}); Object.assign(people.pk, {x: L.otk + 1.5, z: L.z0 + .95});
+  people = {op: [], pack: [], otk: [], cr: person('f2')};
   // сервер и ИИ-дрон
   server = new THREE.Group(); const sb = new THREE.Mesh(G(.38, .9, .34), M('#20242c')); sb.position.y = .45; sb.castShadow = true; server.add(sb);
   server.leds = []; for (let i = 0; i < 6; i++) { const l = new THREE.Mesh(G(.04, .04, .01), MB('#2ecc71')); l.position.set(-.08 + (i % 2) * .16, .2 + (i >> 1) * .22, .175); server.add(l); server.leds.push(l); }
@@ -801,19 +879,14 @@ R.domElement.addEventListener('pointercancel', endPtr);
 R.domElement.addEventListener('wheel', e => { e.preventDefault(); view.zoom = Math.max(.6, Math.min(3, view.zoom * (e.deltaY < 0 ? 1.1 : .9))); }, {passive: false});
 
 // ---------- поведение людей ----------
-function walk(p, dt, next) {
-  if (p.wait > 0) { p.wait -= dt; p.play(p.carry ? 'holding-both' : 'idle'); return; }
-  if (!p.path.length) { p.carry = !p.carry; p.path = next(p); p.wait = .35; return; }
-  const [tx, tz] = p.path[0], dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz), s = .9 * dt;
-  if (d <= s) { p.x = tx; p.z = tz; p.path.shift(); } else { p.x += dx / d * s; p.z += dz / d * s; }
-  p.o.rotation.y = Math.atan2(dx, dz); p.play('walk');
+// человечек = агент из логики: стоит там же, где агент, несёт столько же, сколько агент
+function pool(arr, n, kind) { while (arr.length < n) arr.push(person(kind)); arr.forEach((p, i) => p.o.visible = i < n); }
+function show(p, a, dt) {
+  const dx = a.x - p.x, dz = a.z - p.z, moving = Math.hypot(dx, dz) > .002;
+  if (moving) p.o.rotation.y = Math.atan2(dx, dz);
+  p.x = a.x; p.z = a.z; p.play(moving ? 'walk' : a.c ? 'holding-both' : a.st === 'pack' && S.q.pack >= 1 ? 'interact-right' : 'idle');
+  p.box.visible = a.c > 0; p.box.scale.setScalar(.75 * Math.min(1.6, 1 + (a.c - 1) * .15));
 }
-const opNext = p => {
-  const ox = (S.loc >= OTK_LV ? L.otk : L.pack) - .15, oz = L.z0 + .35;
-  if (!p.carry) { const r = Math.random() * L.VR | 0, [rx, rz] = rackPos(r), fx = rx + .2 + Math.random() * .8, fz = rz + .85; return [[.22, p.z], [.22, fz], [fx, fz]]; }
-  return [[.22, p.z], [.22, oz], [ox, oz]];
-};
-const pkNext = p => [p.carry ? [L.pack - .1, L.z0 + .95] : [L.otk + 1.5, L.z0 + .95]];
 
 // ---------- кадр ----------
 const clock = new THREE.Clock(); let T = 0, lt = 0, ready = false; const fps = {n: 0, t: 0, warned: 0};
@@ -840,19 +913,19 @@ function frame() {
     const z = zones[i], q = S.q[k]; if (!z) return; z.stack.forEach((b, j) => b.visible = j < Math.min(8, Math.ceil(q / qcap(k) * 8)));
     setLabel(z.lb, n + ' ' + fn(q) + '/' + qcap(k), (!tm(k) && q >= 1 || q >= qcap(k)) && blink);
   });
-  setLabel(zones[2].lb, 'Доставка ' + fn(S.q.ship) + '/' + qcap('ship'), (!tm('ship') && S.q.ship >= 1 || S.q.ship >= qcap('ship')) && blink);
-  // фургон уезжает с каждой отправкой
-  if (van.st === 'park' && VIS.ship > 0) { van.st = 'go'; VIS.ship = 0; }
-  if (van.st === 'go') { van.dx += dt * 2.5; if (van.dx > 4) van.st = 'back'; }
-  else if (van.st === 'back') { van.dx -= dt * 2.5; if (van.dx <= 0) { van.dx = 0; van.st = 'park'; } }
+  const nv = S.ag.ship.length, f0 = S.ag.ship[0];
+  setLabel(zones[2].lb, (tm('ship') > 1 ? '🚚×' + tm('ship') + ' ' : 'Доставка ') + fn(S.q.ship) + '/' + qcap('ship'), (!tm('ship') && S.q.ship >= 1 && f0 && f0.st === 'dock' || S.q.ship >= qcap('ship')) && blink);
+  // фургон №1: в рейсе — уехал и возвращается (половина рейса туда, половина обратно)
+  if (f0 && f0.st === 'road' && f0.T) { const k = 1 - f0.t / f0.T; van.dx = 5 * (k < .5 ? k * 2 : 2 - k * 2); } else van.dx = 0;
   van.g.position.x = L.dock + van.dx;
   // люди
   const P_ = people;
-  P_.op.o.visible = !!tm('op'); if (tm('op')) walk(P_.op, dt, opNext);
-  P_.pk.o.visible = !!tm('pack'); if (tm('pack')) walk(P_.pk, dt, pkNext);
-  P_.otk.o.visible = !!tm('otk') && S.loc >= OTK_LV; P_.otk.x = L.otk + .57; P_.otk.z = L.z0 - .15; P_.otk.o.rotation.y = 0; P_.otk.play(S.q.otk > .5 ? 'interact-right' : 'idle');
-  P_.cr.o.visible = !!tm('ship') && van.st === 'park'; P_.cr.x = L.dock - .3; P_.cr.z = L.z0 + 2.2; P_.cr.o.rotation.y = Math.PI * .75; P_.cr.play('idle');
-  for (const p of Object.values(P_)) { p.o.position.set(p.x, 0, p.z); p.box.visible = p.carry && p.o.visible && p.path.length > 0; p.mix.update(dt); }
+  pool(P_.op, S.ag.op.length, 'm1'); S.ag.op.forEach((a, i) => show(P_.op[i], a, dt));
+  pool(P_.pack, S.ag.pack.length, 'm2'); S.ag.pack.forEach((a, i) => show(P_.pack[i], a, dt));
+  const no = S.loc >= OTK_LV ? Math.min(3, tm('otk')) : 0; pool(P_.otk, no, 'f1');
+  P_.otk.forEach((p, i) => { p.x = L.otk + .3 + i * .3; p.z = L.z0 - .15; p.o.rotation.y = 0; p.box.visible = false; p.play(S.q.otk >= 1 ? 'interact-right' : 'idle'); });
+  P_.cr.o.visible = !!tm('ship') && f0 && f0.st === 'dock'; P_.cr.x = L.dock - .3; P_.cr.z = L.z0 + 2.2; P_.cr.o.rotation.y = Math.PI * .75; P_.cr.box.visible = false; P_.cr.play(f0 && f0.c ? 'interact-right' : 'idle');
+  for (const p of [...P_.op, ...P_.pack, ...P_.otk, P_.cr]) { p.o.position.set(p.x, 0, p.z); p.mix.update(dt); }
   // сервер и дрон
   server.visible = !!S.mg.srv; server.leds.forEach((l, i) => l.material.color.set(Math.sin(T * 6 + i * 1.7) > 0 ? '#2ecc71' : '#0a3d1f'));
   drone.visible = drone.beam.visible = !!S.mg.ai;
