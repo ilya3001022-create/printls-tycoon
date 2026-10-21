@@ -661,7 +661,7 @@ function view(){
     (S.build?'<div style="margin-top:8px" data-u="bld"></div>':nl?`<div class="row" style="margin-top:8px"><div class="grow sub">Переезд: ${nl.n} — до ${nl.max} принтеров${S.loc+1===OTK_LV?', открывается ОТК':''}. Стройка ${dur(BAL.bt[S.loc+1])}.<br>${clDone(S.loc)>=2?'✅ клиенты довольны':'🤝 нужно 2 крупных клиента из 3, сейчас '+clDone(S.loc)}</div><button class="btn" data-a="loc" data-c="${nl.c}" ${clDone(S.loc)>=2?'':'disabled data-lock'}>${fm(nl.c)}</button></div>`:'<div class="sub ok" style="margin-top:6px">Ты на вершине. Дальше — только продажа бизнеса.</div>')+'</div>';
    if(S.loc>=5)h+=`<h3 style="margin-top:14px">Продать бизнес</h3><div class="card"><div class="sub">Всё обнулится, а репутация ⭐ останется: каждая звезда +10% к доходу навсегда. Сейчас ⭐ ${S.rep}.</div>
     <div class="row" style="margin-top:8px"><div class="grow sub">${prestGain()?'Получишь ⭐ '+prestGain():'Нужно заработать за круг 1 млрд ₽'}</div><button class="btn" data-a="prest" ${prestGain()?'':'disabled'}>Продать</button></div></div>`;
-   h+=`<div class="sub" style="text-align:center;margin:4px 0 10px">Printls Tycoon · от команды Printls3D</div><div class="card sub">Заработано за всё время: ${fm(S.all)} · сделано деталей: ${fn(S.made)} · в игре ${dur((Date.now()-S.t0)/1000)}<div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn sec" data-a="snd">${S.snd?'🔊 Звук вкл':'🔇 Звук выкл'}</button><button class="btn sec" data-a="eco">${S.eco?'🪫 Графика: экономная':'✨ Графика: полная'}</button><button class="btn sec" data-a="reset">Начать с нуля</button></div></div>`;
+   h+=`<div class="sub" style="text-align:center;margin:4px 0 10px">Printls Tycoon · от команды Printls3D</div><div class="card sub">Заработано за всё время: ${fm(S.all)} · сделано деталей: ${fn(S.made)} · в игре ${dur((Date.now()-S.t0)/1000)}<div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn sec" data-a="snd">${S.snd?'🔊 Звук вкл':'🔇 Звук выкл'}</button><button class="btn sec" data-a="eco">${S.eco?'🪫 Графика: экономная':'✨ Графика: полная'}</button><button class="btn sec" data-a="exp">📋 Код сохранения</button><button class="btn sec" data-a="imp2">📥 Загрузить код</button><button class="btn sec" data-a="reset">Начать с нуля</button></div><div class="sub" style="margin-top:6px">${TG?"☁️ Прогресс сохраняется в облаке Telegram — откроешь бота с любого устройства, он на месте.":"⚠️ Игра открыта не через бота: прогресс хранится только в этом браузере. Надёжнее открывать кнопкой «Играть» в боте — там облако Telegram. Или сохрани код."}</div></div>`;
    return h}
 }
 function render(){
@@ -723,6 +723,13 @@ const A={
   eco:()=>{S.eco=S.eco?0:1},
   prest:()=>{const g=prestGain();if(!g)return;modal('Продать бизнес?','Получишь ⭐ '+g+'. Принтеры, деньги и люди обнулятся.',
     [{t:'Продаю',f:()=>{const d=S.daily;S=fresh(S.rep+g,S.all,S.best);S.daily=d;S.intro=true;tab='farm';render();toast('⭐ Репутация теперь '+S.rep)}},{t:'Подумаю',sec:1}])},
+  exp:()=>{const j=JSON.stringify(S),code='PT1.'+btoa(unescape(encodeURIComponent(j)))+'.'+hsh(j).toString(36);
+    try{navigator.clipboard.writeText(code);toast('📋 Код сохранения скопирован — сохрани его в «Избранное» Telegram')}catch(e){}
+    modal('📋 Код сохранения','Скопирован в буфер. Если не скопировался — выдели и скопируй вручную:<br><textarea readonly style="width:100%;height:90px;margin-top:8px;background:#0f131b;color:#9fb;border:1px solid #2b3549;border-radius:8px;font-size:10px">'+code+'</textarea>')},
+  imp2:()=>modal('📥 Загрузить код','Вставь код сохранения:<textarea id="impc" style="width:100%;height:90px;margin-top:8px;background:#0f131b;color:#fff;border:1px solid #2b3549;border-radius:8px;font-size:11px;-webkit-user-select:text;user-select:text"></textarea>'+
+    '<button class="btn" style="width:100%;margin-top:8px" data-a="impgo">Загрузить</button>',[{t:'Отмена',sec:1}]),
+  impgo:()=>{const c=($('impc')||{}).value||'';try{const [t,b,h]=c.trim().split('.'),j=decodeURIComponent(escape(atob(b)));if(t!=='PT1'||hsh(j).toString(36)!==h)throw 0;
+    const o=JSON.parse(j);if(!o.pr)throw 0;S=upgrade(o);S.last=Date.now();$('mod').innerHTML='';save();cloudSave(JSON.stringify(S),1);render();toast('📥 Прогресс загружен')}catch(e){toast('❌ Код не подошёл — проверь, что скопирован целиком')}},
   reset:()=>modal('Начать с нуля?','Сотрётся всё, включая звёзды.',[{t:'Стереть',f:()=>{const d=S.daily;S=fresh();S.daily=d;S.intro=true;render()}},{t:'Нет',sec:1}]),
 };
 const LIGHT=new Set(['p','clrall','st','spool','mb','offer','boost','skip','bprod','game']);
@@ -730,6 +737,8 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b
   const m0=S.money;A[a](b.dataset.i);sound('tap');haptic();if(S.money-m0>.5)pop(e.clientX,e.clientY,'+'+fm(S.money-m0));if(a==='ctask'||a==='offer'||a==='bclaim'||!LIGHT.has(a)||S.pr.length+':'+S.prod!==sig&&a==='mb')render();else upd();save()});
 document.addEventListener('change',e=>{const el=e.target.closest('select[data-a]');if(!el)return;A[el.dataset.a](el.value,el);upd();save()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){save();cloudSave(JSON.stringify(S),1)}}); // свернули — сразу и в облако
+window.addEventListener('pagehide',()=>{save();cloudSave(JSON.stringify(S),1)}); // закрыли вкладку / встроенный браузер
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){} // просим браузер не чистить хранилище
 // стеллажи: у каждого своё изделие (или основное)
 function rackCard(){const opts=PR.map((x,i)=>S.unl[i]?i:-1).filter(i=>i>=0);if(opts.length<2)return'';
   const n=Math.ceil(Math.min(S.racks*6,Lc().max)/3);
