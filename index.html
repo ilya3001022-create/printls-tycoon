@@ -70,7 +70,8 @@ h3{margin:0 0 6px;font-size:15px}
 <nav id="nav"></nav>
 <div id="mod"></div>
 <script>
-window.onerror=m=>{document.body.insertAdjacentHTML('afterbegin','<div id="err" style="background:#b00;color:#fff;padding:6px">'+m+'</div>')};
+window.onerror=m=>{if(/^Script error/i.test(String(m))){window.__scriptErr=(window.__scriptErr||0)+1;return true} // ошибка внутри движка 3D — сцена сама восстановится
+  document.body.insertAdjacentHTML('afterbegin','<div id="err" style="background:#b00;color:#fff;padding:6px">'+m+'</div>')};
 // ==LOGIC== (этот кусок гоняет и браузер, и симулятор баланса sim.js)
 
 // ---------- баланс: все крутилки в одном месте ----------
@@ -164,6 +165,7 @@ const UP=[
  {k:'klipper',n:'Klipper на Эндеры',d:'прошивка Klipper + Input Shaping: Эндеры печатают в 1,8 раза быстрее',c:12000,f:1,max:1,lv:0},
  {k:'bltouch',n:'BLTouch на Эндеры',d:'датчик автоуровня стола: на Эндерах вдвое меньше отлипов',c:2500,f:1,max:1,lv:0},
  {k:'dd',n:'Директ-экструдер на Эндеры',d:'вдвое меньше засоров и оплавленных PTFE на Эндерах',c:3500,f:1,max:1,lv:0},
+ {k:'maint',n:'Плановое ТО',d:'смазка, чистка, подтяжка ремней по графику: на 30% меньше аварий на всех принтерах',c:20000,f:1,max:1,lv:1},
  {k:'hard',n:'Закалённые сопла на всех',d:'засоры на карбоне −70%',c:30000,f:1,max:1,lv:2},
  {k:'farmsw',n:'ПО фермы',d:'единая очередь на весь парк: оператор уносит +50% деталей за рейс (как SimplyPrint, Bambu Farm Manager)',c:500000,f:2.4,max:3,lv:3},
  {k:'mkt',n:'Маркетинг',d:'+15% к спросу: карточки, реклама, блогеры',c:5000,f:1.45,max:999,lv:0}];
@@ -202,7 +204,7 @@ const FAULTS=[ // n — что случилось, p — нужная запча
 // какая поломка случится с принтером: Эндеры ломаются чаще и по-своему, моды и закалённые сопла снижают шансы
 function pickFault(x){const en=x.t===0,cf=/CF/.test(PX(x).m);let tot=0,base=0;const ws=FAULTS.map(f=>{let w=f.w;
   if(f.cf&&!cf||f.ams&&!S.up.ams||f.bambu&&en)w=0;if(f.ender)w*=en?f.ender:.5;base+=w;if(en&&f.lift&&S.up.bltouch)w*=.5;if(en&&f.feed&&S.up.dd)w*=.5;if(f.cf&&S.up.hard)w*=.3;tot+=w;return w});
-  if(Math.random()>tot/base)return -1; // мод предотвратил поломку — её просто не будет
+  if(S.up.maint)tot*=.7;if(Math.random()>tot/base)return -1; // мод или ТО предотвратили поломку — её просто не будет
   let r=Math.random()*tot;for(let i=0;i<ws.length;i++){r-=ws[i];if(r<=0)return i}return 0}
 // починить: запчасть со склада; игрок может срочно купить (+20%), снабженец — докупает сам (+10%)
 function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
@@ -210,17 +212,17 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
     else if(!auto&&S.money>=pt.c*1.2){spend(pt.c*1.2,'p');toast('🚚 Срочно купил «'+pt.n+'» за '+fm(pt.c*1.2)+' и починил')}
     else if(auto&&S.mg.sup&&S.money>=pt.c*1.1)spend(pt.c*1.1,'p');
     else{if(!auto)toast('🔧 Нужна запчасть «'+pt.n+'» ('+fm(pt.c)+') — Магазин → Запчасти');return false}}
-  restart(x,i);return true}
+  sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const KEY='printls_tycoon',VER=15; // ключ больше не меняется; формат — по полю ver и миграциям
+const KEY='printls_tycoon',VER=16; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
 let S, acc={i:0,w:0,e:0,p:0}, accT=0, accN=0;
 const role=()=>({n:0,pl:0,lv:0,a:0});
 const fresh=(rep=0,all=0,best=0)=>({money:3000,gems:0,run:0,all,best,rep,loc:0,racks:1,pr:[{t:0,p:0,st:'run',ft:0}],cnt:[1],prod:0,unl:[true],pl:1500,
   q:{otk:0,pack:0,ship:0},qc:{otk:0,pack:0,ship:0},team:{op:role(),pack:role(),ship:role(),otk:role()},mg:{},up:{},
-  cl:{},cb:0,build:null,gt:0,daily:null,boostT:0,boostCD:0,offer:null,emT:0,lowpl:0,snd:1,eco:0,broke:0,
+  cl:{},cb:0,build:null,gt:0,daily:null,boostT:0,boostCD:0,offer:null,emT:0,lowpl:0,snd:1,mus:1,eco:0,broke:0,
   order:null,board:[],ag:{op:[],pack:[],ship:[]},qb:{otk:{},pack:{},ship:{}},rk:[],mp:{},ns:0,star:4.5,seen:{},parts:{noz:2,ptfe:1},trash:0,dq:null,bf:{},gcd:{},cv:0,cf:0,cbd:0,cbuy:0,imp:0,impB:0,out:0,ev:90,last:Date.now(),rate:0,exp:0,stat:{i:0,w:0,e:0,p:0},made:0,rej:0,intro:false,t0:Date.now()});
 
 // ---------- формулы ----------
@@ -383,7 +385,7 @@ function stepPack(a,dt){const L=lay(),v=vOf('pack'),c=capOf('pack');
     if(a.st==='ret')a.st='pack'}}
 // фургон: грузит со склада у ворот, уезжает полным (или если ждать больше нечего); груз едет в кузове (f.c),
 // деньги — когда довёз клиенту (середина рейса), назад возвращается пустым
-function depart(f){f.st='road';f.t=f.T=road();f.idle=0;S.cv=(S.cv||0)+1}
+function depart(f){f.st='road';f.t=f.T=road();f.idle=0;S.cv=(S.cv||0)+1;sound('van')}
 function stepVan(f,i,dt,dtRoad){const c=capOf('ship'),k=S.broke?.5:1;if(dtRoad!=null&&f.st==='road')dt=dtRoad;
   for(let g=0;g<40&&dt>1e-9;g++){
     if(f.st==='road'){if(f.c>0){const u=Math.min(Math.max(0,f.t-f.T/2),dt);f.t-=u;dt-=u;if(f.t<=f.T/2+1e-9){deliver(f.b||{});f.b={};f.c=0}continue} // туда: везёт груз
@@ -420,7 +422,7 @@ function tick(dt){
   const on=!(S.out>0)||S.up.ups;let el=0;
   S.pr.forEach((x,i)=>{const q=PX(x);
     if(x.st==='nopl'&&S.pl>=q.g){S.pl-=q.g;x.st='run';x.p=0}
-    if(x.st==='run'&&on){x.p+=dt*spOf(x)*sp/q.t;el+=PT[x.t].sp;if(x.p>=1){x.p=1;x.st='done'}}
+    if(x.st==='run'&&on){x.p+=dt*spOf(x)*sp/q.t;el+=PT[x.t].sp;if(x.p>=1){x.p=1;x.st='done';sound('done')}}
     if(x.st==='fail'&&(S.mg.ai||S.mg.tech)){x.ft+=dt;if(x.ft>(S.mg.ai?2:8)){if(!fixPrinter(x,i,true))x.ft=0}} // ремонтник чинит, если есть запчасть
   });
   DONE=[];S.pr.forEach((x,i)=>{if(x.st==='done')DONE.push(i)}); // готовые — один проход на такт
@@ -510,6 +512,7 @@ const skipCost=()=>S.build?Math.max(1,Math.ceil((S.build.end-Date.now())/60000/B
 // старые сохранения: v6 и v7 совместимы по изделиям; более ранние — другая экономика, их не тянем
 const OLDC=[40000,800000,12e6,1.8e9,110e9,110e9],NEWC=[20000,250000,2.5e6,20e6,200e6,200e6]; // цены следующего переезда до/после перехода на рубли
 const MIG={6:s=>{s.ag={op:[],pack:[],ship:[]};return s},7:s=>s,
+  15:s=>{s.mus=1;return s}, // музыка по умолчанию — тихо, выключается в «Росте»
   14:s=>{s.trash=0;return s},
   13:s=>{s.parts={noz:2,fan:1,ptfe:1};(s.pr||[]).forEach(x=>{if(x.st==='fail')x.fk=0});return s}, // старые аварии — «спагетти», стартовый набор запчастей
   12:s=>{s.star=4.5;s.seen={};if((s.made||0)>=80||s.loc>0)for(const k of ['shop','board','chain','team','boost','clients','grow','games','dq'])s.seen[k]=1;return s},
@@ -530,7 +533,7 @@ let TG=null,cloudT=0;
 // Telegram: скрипт грузится асинхронно — игра не ждёт telegram.org. Когда догрузился: цвета, «Назад», облако
 function tgInit(){const W=window.Telegram&&Telegram.WebApp;if(TG||!W||!W.initData)return;TG=W;
   try{TG.ready();TG.expand();TG.disableVerticalSwipes&&TG.disableVerticalSwipes();TG.setHeaderColor&&TG.setHeaderColor('#0f131b');TG.setBackgroundColor&&TG.setBackgroundColor('#0f131b');
-    TG.setBottomBarColor&&TG.setBottomBarColor('#141a25');TG.BackButton.onClick(goBack)}catch(e){}
+    TG.setBottomBarColor&&TG.setBottomBarColor('#141a25');TG.BackButton.onClick(()=>{try{goBack()}catch(e){}})}catch(e){}
   if(typeof S!=='undefined'&&S)cloudLoad()}
 // системная «Назад» Telegram: закрывает мини-игру или окно, потом возвращает на «Цех»; на «Цехе» — не нужна
 function goBack(){const g=document.getElementById('mg');if(g){clearInterval(g._t);g.remove();return}
@@ -546,16 +549,39 @@ function cloudLoad(pre){if(!TG||!TG.CloudStorage)return;const keys=pre?[pre+'h',
   const [n,len,hs]=h.split('|').map(Number);if(!n)return;
   const ks=[...Array(n)].map((_,i)=>keys[1](i));
   TG.CloudStorage.getItems(ks,(e2,v)=>{if(e2||!v)return;const t=ks.map(k=>v[k]||'').join('');if(t.length!==len||hsh(t)!==hs)return; // кусок не дописался — не трогаем
-    try{const j=JSON.parse(t);if(j&&j.pr&&(!hadLocal||j.last>S.last)){S=upgrade(j);hadLocal=true;render();offline()}}catch(x){}})})}catch(e){}}
+    try{const j=JSON.parse(t);if(j&&j.pr&&(!hadLocal||j.last>S.last)){S=upgrade(j);hadLocal=true;render();offline()}}catch(x){window.__cloudErr=String(x)}})})}catch(e){}}
 const haptic=t=>{try{TG&&TG.HapticFeedback.impactOccurred(t||'light')}catch(e){}};
 
 // ---------- звук и мелочи ----------
 const $=id=>document.getElementById(id);
-let AC=null,sndT=0;
-function sound(k){if(!S||!S.snd)return;try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const t=AC.currentTime;
+let AC=null,sndT=0,sndK={};
+// звук синтезируется на лету: события, гул цеха (растёт с числом работающих принтеров) и тихая фоновая музыка
+function audio(){if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();ambInit()}catch(e){}}if(AC&&AC.state==='suspended')AC.resume();return AC}
+let AMB=null,MUS={on:0,step:0,next:0};
+function ambInit(){const n=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate),d=n.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+  const src=AC.createBufferSource();src.buffer=n;src.loop=true;const bp=AC.createBiquadFilter();bp.type='bandpass';bp.frequency.value=320;bp.Q.value=.7;
+  const hum=AC.createOscillator();hum.type='sine';hum.frequency.value=96;const hg=AC.createGain();hg.gain.value=.25;hum.connect(hg);
+  const g=AC.createGain();g.gain.value=0;src.connect(bp).connect(g);hg.connect(g);g.connect(AC.destination);src.start();hum.start();AMB={g}}
+function ambTick(){if(!AC||!AMB)return;const run=S.pr.filter(x=>x.st==='run').length,on=S.snd&&!document.hidden&&tab==='farm';
+  AMB.g.gain.setTargetAtTime(on?Math.min(.05,.006+run*.0012):0,AC.currentTime,.4);
+  // музыка: спокойные аккорды Am–F–C–G и арпеджио, 84 удара в минуту
+  if(!S.mus||document.hidden)return;const bt=60/84;if(MUS.next<AC.currentTime)MUS.next=AC.currentTime+.05;
+  const CH=[[220,261.6,329.6],[174.6,220,261.6],[261.6,329.6,392],[196,246.9,293.7]];
+  while(MUS.next<AC.currentTime+.6){const c=CH[(MUS.step/8|0)%4],t=MUS.next,b=MUS.step%8;
+    if(b===0)for(const f of c)note(f/2,bt*7.6,'triangle',.018,t);
+    note(c[[0,1,2,1,0,2,1,2][b]]*2,bt*.9,'sine',.012,t);MUS.next+=bt/2;MUS.step++}}
+function note(f,d,w,v,t){const o=AC.createOscillator(),g=AC.createGain(),lp=AC.createBiquadFilter();lp.type='lowpass';lp.frequency.value=1800;o.type=w;o.frequency.value=f;
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+.03);g.gain.exponentialRampToValueAtTime(.0005,t+d);o.connect(lp).connect(g).connect(AC.destination);o.start(t);o.stop(t+d+.05)}
+setInterval(()=>{try{ambTick()}catch(e){}},200);
+document.addEventListener('visibilitychange',()=>{try{if(AC)document.hidden?AC.suspend():AC.resume()}catch(e){}});
+function sound(k){if(!S||!S.snd)return;try{if(!audio())return;const t=AC.currentTime;if(performance.now()-(sndK[k]||0)<({done:350,van:800,fix:300}[k]||0))return;sndK[k]=performance.now();
   const tone=(f,d,w,v,at)=>{const o=AC.createOscillator(),g=AC.createGain();o.type=w;o.frequency.value=f;g.gain.setValueAtTime(v,t+at);g.gain.exponentialRampToValueAtTime(.001,t+at+d);o.connect(g).connect(AC.destination);o.start(t+at);o.stop(t+at+d)};
   if(k==='coin'){if(performance.now()-sndT<150)return;sndT=performance.now();tone(1320,.08,'square',.05,0);tone(1760,.12,'square',.05,.06)}
-  else if(k==='bad')tone(180,.25,'sawtooth',.06,0);else tone(660,.04,'triangle',.06,0)}catch(e){}}
+  else if(k==='bad')tone(180,.25,'sawtooth',.06,0);
+  else if(k==='done')tone(1046,.09,'sine',.03,0);                                   // стол готов — тихое «дзынь»
+  else if(k==='van'){tone(330,.18,'square',.03,0);tone(330,.22,'square',.03,.25)}   // гудок грузовика
+  else if(k==='fix'){tone(2200,.04,'square',.025,0);tone(1700,.05,'square',.025,.07)} // ключ
+  else tone(660,.04,'triangle',.06,0)}catch(e){}}
 function pop(x,y,t){const d=document.createElement('div');d.className='pop';d.style.left=x+'px';d.style.top=y+'px';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),1000)}
 function hintText(){const f=[...stages()].reverse().find(k=>S.q[k]>=qcap(k)-.01); // забитый участок ближе к клиенту — главный
   {const w=S.pr.find(x=>x.st==='fail'&&FAULTS[x.fk||0].p&&!(S.parts[FAULTS[x.fk||0].p]>0));if(w&&(S.mg.tech||S.mg.ai))return'🔧 Принтер ждёт запчасть «'+PT_(FAULTS[w.fk||0].p).n+'» — Магазин → Запчасти'}
@@ -714,7 +740,7 @@ function view(){
    <button class="btn${S.ns?'':' sec'}" data-a="ns">${S.ns?'Включена':'Выключена'}</button></div>`+
    roles().map(roleCard).join('')+'<h3 style="margin-top:14px">Специалисты</h3>'+MG.map((g,i)=>
    `<div class="card row"><div class="grow"><b>${g.n}</b><div class="sub">${g.d}</div></div>${S.mg[g.k]?'<span class="tag auto">в штате</span>':g.lv>S.loc?lockTxt(g.lv):`<button class="btn" data-a="mg" data-i="${i}" data-c="${g.c}">${fm(g.c)}</button>`}</div>`).join('');
-  if(tab==='grow'){let h='<h3>Улучшения</h3>'+UP.map((u,i)=>{const l=S.up[u.k]||0;
+  if(tab==='grow'){let h='<h3>Улучшения</h3>'+UP.map((u,i)=>{const l=S.up[u.k]||0;if(['klipper','bltouch','dd'].includes(u.k)&&!(S.cnt[0]>0)&&!l)return''; // моды Эндера — пока они есть
     return `<div class="card row"><div class="grow"><b>${u.n}</b> <span class="tag">${u.max>=999?l+" ур.":l+" / "+u.max}</span><div class="sub">${u.d}</div></div>${u.lv>S.loc?lockTxt(u.lv):l>=u.max?'<span class="tag auto">макс</span>':`<button class="btn" data-a="up" data-i="${i}" data-c="${upcost(u)}">${fm(upcost(u))}</button>`}</div>`}).join('');
    const nl=LOC[S.loc+1];
    h+='<h3 style="margin-top:14px">Обустройство</h3><div class="card" data-u="imp"></div>'+
@@ -722,7 +748,7 @@ function view(){
     (S.build?'<div style="margin-top:8px" data-u="bld"></div>':nl?`<div class="row" style="margin-top:8px"><div class="grow sub">Переезд: ${nl.n} — до ${nl.max} принтеров${S.loc+1===OTK_LV?', открывается ОТК':''}. Стройка ${dur(BAL.bt[S.loc+1])}.<br>${clDone(S.loc)>=2?'✅ клиенты довольны':'🤝 нужно 2 крупных клиента из 3, сейчас '+clDone(S.loc)}</div><button class="btn" data-a="loc" data-c="${nl.c}" ${clDone(S.loc)>=2?'':'disabled data-lock'}>${fm(nl.c)}</button></div>`:'<div class="sub ok" style="margin-top:6px">Ты на вершине. Дальше — только продажа бизнеса.</div>')+'</div>';
    if(S.loc>=5)h+=`<h3 style="margin-top:14px">Продать бизнес</h3><div class="card"><div class="sub">Всё обнулится, а репутация ⭐ останется: каждая звезда +10% к доходу навсегда. Сейчас ⭐ ${S.rep}.</div>
     <div class="row" style="margin-top:8px"><div class="grow sub">${prestGain()?'Получишь ⭐ '+prestGain():'Нужно заработать за круг 1 млрд ₽'}</div><button class="btn" data-a="prest" ${prestGain()?'':'disabled'}>Продать</button></div></div>`;
-   h+=`<div class="sub" style="text-align:center;margin:4px 0 10px">Printls Tycoon · от команды Printls3D</div><div class="card sub">Заработано за всё время: ${fm(S.all)} · сделано деталей: ${fn(S.made)} · в игре ${dur((Date.now()-S.t0)/1000)}<div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn sec" data-a="snd">${S.snd?'🔊 Звук вкл':'🔇 Звук выкл'}</button><button class="btn sec" data-a="eco">${S.eco?'🪫 Графика: экономная':'✨ Графика: полная'}</button><button class="btn sec" data-a="exp">📋 Код сохранения</button><button class="btn sec" data-a="imp2">📥 Загрузить код</button><button class="btn sec" data-a="reset">Начать с нуля</button></div><div class="sub" style="margin-top:6px">${TG?"☁️ Прогресс сохраняется в облаке Telegram — откроешь бота с любого устройства, он на месте.":"⚠️ Игра открыта не через бота: прогресс хранится только в этом браузере. Надёжнее открывать кнопкой «Играть» в боте — там облако Telegram. Или сохрани код."}</div></div>`;
+   h+=`<div class="sub" style="text-align:center;margin:4px 0 10px">Printls Tycoon · от команды Printls3D</div><div class="card sub">Заработано за всё время: ${fm(S.all)} · сделано деталей: ${fn(S.made)} · в игре ${dur((Date.now()-S.t0)/1000)}<div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn sec" data-a="snd">${S.snd?'🔊 Звук вкл':'🔇 Звук выкл'}</button><button class="btn sec" data-a="mus">${S.mus?'🎵 Музыка вкл':'🎵 Музыка выкл'}</button><button class="btn sec" data-a="eco">${S.eco?'🪫 Графика: экономная':'✨ Графика: полная'}</button><button class="btn sec" data-a="exp">📋 Код сохранения</button><button class="btn sec" data-a="imp2">📥 Загрузить код</button><button class="btn sec" data-a="reset">Начать с нуля</button></div><div class="sub" style="margin-top:6px">${TG?"☁️ Прогресс сохраняется в облаке Telegram — откроешь бота с любого устройства, он на месте.":"⚠️ Игра открыта не через бота: прогресс хранится только в этом браузере. Надёжнее открывать кнопкой «Играть» в боте — там облако Telegram. Или сохрани код."}</div></div>`;
    return h}
 }
 function render(){
@@ -781,7 +807,8 @@ const A={
   game:k=>{if((S.gcd[k]||0)>0){toast('🎮 Эту игру можно снова через '+dur(S.gcd[k]));return}startGame(k)},
   clean:()=>{const n=S.trash||0;if(!n)return;S.trash=0;earn(n*20,1);toast('🧹 Прибрался: вынес '+n+' '+pl3(n,'пакет','пакета','пакетов')+' мусора, сдал пластик на переработку +'+fm(n*20))},
   part:v=>{const [k,n]=v.split(':'),pt=PT_(k),c=+n===5?pt.c*4.5:pt.c;if(S.money<c)return;spend(c,'p');S.parts[k]=(S.parts[k]||0)+ +n;toast('🔧 «'+pt.n+'»: на складе '+S.parts[k])},
-  snd:()=>{S.snd=S.snd?0:1},
+  snd:()=>{S.snd=S.snd?0:1;audio()},
+  mus:()=>{S.mus=S.mus?0:1;audio()},
   boost:()=>{if(S.boostT>0||S.boostCD>0)return;S.boostT=120;S.boostCD=600;sound('coin');toast('📣 Реклама: все цены ×2 на 2 минуты')},
   eco:()=>{S.eco=S.eco?0:1},
   prest:()=>{const g=prestGain();if(!g)return;modal('Продать бизнес?','Получишь ⭐ '+g+'. Принтеры, деньги и люди обнулятся.',
@@ -796,7 +823,7 @@ const A={
   reset:()=>modal('Начать с нуля?','Сотрётся всё, включая звёзды.',[{t:'Стереть',f:()=>{const d=S.daily;S=fresh();S.daily=d;S.intro=true;render()}},{t:'Нет',sec:1}]),
 };
 const LIGHT=new Set(['p','clrall','st','spool','mb','offer','boost','skip','bprod','game']);
-document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b||b.disabled||b.tagName==='SELECT')return;const a=b.dataset.a;
+document.addEventListener('click',e=>{if(S&&(S.snd||S.mus))audio();const b=e.target.closest('[data-a]');if(!b||b.disabled||b.tagName==='SELECT')return;const a=b.dataset.a;
   const m0=S.money;A[a](b.dataset.i);sound('tap');haptic();if(S.money-m0>.5)pop(e.clientX,e.clientY,'+'+fm(S.money-m0));if(a==='ctask'||a==='offer'||a==='bclaim'||!LIGHT.has(a)||S.pr.length+':'+S.prod!==sig&&a==='mb')render();else upd();save()});
 document.addEventListener('change',e=>{const el=e.target.closest('select[data-a]');if(!el)return;A[el.dataset.a](el.value,el);upd();save()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){save();cloudSave(JSON.stringify(S),1)}}); // свернули — сразу и в облако
@@ -860,7 +887,7 @@ $('m').addEventListener('click',()=>{const t=performance.now();tapN=t-tapT<500?t
 function dbgData(){const a=[...PERF.ft].sort((x,y)=>x-y),q=p=>a.length?a[Math.min(a.length-1,Math.floor(a.length*p))].toFixed(1):'-';const T=window.__T3,r=T&&T.R.info;
   return {fps:a.length?Math.round(1000/(PERF.ft.reduce((x,y)=>x+y,0)/a.length)):0,кадр_p50:q(.5),кадр_p95:q(.95),кадр_p99:q(.99),кадр_макс:a.length?a[a.length-1].toFixed(0):'-',
     тактов_за_кадр_0_1_2:PERF.tk.join('/'),вызовов:r?r.render.calls:'-',треуг:r?r.render.triangles:'-',геом:r?r.memory.geometries:'-',текстур:r?r.memory.textures:'-',upd_мс:PERF.upd.toFixed(1),
-    dpr:window.devicePixelRatio,эконом:S.eco,площадка:S.loc,принтеров:S.pr.length,ua:navigator.userAgent.slice(0,60)}}
+    dpr:window.devicePixelRatio,ошибок_движка:window.__scriptErr||0,ошибка_облака:window.__cloudErr||'нет',эконом:S.eco,площадка:S.loc,принтеров:S.pr.length,ua:navigator.userAgent.slice(0,60)}}
 function dbgShow(){const d=$('dbg');if(!d)return;const o=dbgData();d.textContent=Object.entries(o).map(([k,v])=>k+': '+v).join('\n')+'\n[тап — скопировать]';
   d.onclick=()=>{try{navigator.clipboard.writeText(JSON.stringify(o))}catch(e){}toast('📋 Отчёт скопирован — перешли его в чат')}}
 setInterval(save,5000);
@@ -881,6 +908,9 @@ R.shadowMap.enabled = true;
 R.shadowMap.type = THREE.PCFSoftShadowMap;
 R.toneMapping = THREE.ACESFilmicToneMapping; R.toneMappingExposure = 1.25; // мягкий «кинотон» вместо плоского света
 wrap.prepend(R.domElement);
+let glLost = false; // iOS при сворачивании может отобрать WebGL — ждём возврата и пересобираем сцену
+R.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); glLost = true; });
+R.domElement.addEventListener('webglcontextrestored', () => { glLost = false; built = ''; });
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#0b0f16');
 const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 200);
@@ -1339,7 +1369,8 @@ function frame() {
   // автоэконом: не мерим первые 5 с после загрузки и пересборки (там рывки у всех), включаем только после двух плохих окон подряд (FPS < 24)
   if (T - fps.from > 5) { fps.n++; fps.t += dt; if (fps.t > 4) { const f = fps.n / fps.t; fps.bad = f < 24 ? fps.bad + 1 : 0;
     if (!S.eco && fps.bad >= 2 && !fps.warned) { fps.warned = 1; S.eco = 1; S.ecoAuto = 1; toast('🪫 Включил экономную графику — телефон не тянет тени. Вернуть можно во вкладке «Рост»'); } fps.n = 0; fps.t = 0; } }
-  placeCam(); R.render(scene, cam);
+  if (glLost) return;
+  try { placeCam(); R.render(scene, cam); } catch (e) { built = ''; } // сбой кадра — пересобрать сцену в следующем
 }
 loadAssets().then(() => { ready = true; $('smsg').remove(); }).catch(e => { $('smsg').textContent = 'Не загрузилась 3D-графика: ' + e.message; });
 window.render3d = frame; // зовёт главный цикл game.js после тактов логики
