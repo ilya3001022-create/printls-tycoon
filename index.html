@@ -442,7 +442,7 @@ function tick(dt){
   if(wk)offScreen(dt);
   if(wk)for(const k of ST_FIX)if(stages().includes(k)&&S.team[k].n){const r=S.team[k];r.a=Math.min(r.a+sr(k)*dt,5+sr(k)*dt);while(r.a>=1&&proc(k,1))r.a-=1} // контролёры и обработчики стоят у стола
   if(S.mg.sup)supply();
-  if(S.mg.clean&&(S.trash||0)>0){S.cln=(S.cln||0)+dt;if(S.cln>20){S.cln=0;S.trash--}} // уборщица: пакет каждые 20 с
+  if(S.mg.clean&&(S.trash||0)>0){S.cln=(S.cln||0)+dt;if(S.cln>10){S.cln=0;S.trash=Math.max(0,S.trash-Math.max(2,Math.ceil((S.fm||0)*10/25*2)))}} // уборщица: раз в 10 с выносит вдвое больше, чем ферма успела намусорить (пакет на 25 деталей)
   // расходы: зарплаты и электричество; нечем платить — люди работают вполсилы
   const w=wages()*dt,e=el*elecK()*dt;spend(w,'w');spend(e,'e');
   if(S.money<0){S.money=0;if(!S.broke){S.broke=1;toast(wages()?'💸 Нечем платить зарплату — люди работают вполсилы. Уволь лишних или подними доход':'💡 Нечем платить за свет — отвези готовое, чтобы заработать');sound('bad')}}else if(S.money>w*50)S.broke=0;
