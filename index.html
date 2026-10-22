@@ -228,7 +228,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.19.1'; // номер версии подставляет release.sh
+const APPV='0.19.2'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=17; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -465,7 +465,7 @@ function tick(dt){
   if(S.order){S.order.left-=dt;if(S.order.left<=0){toast('⏰ Заказ «'+S.order.n+'» сорван — не успели');S.order=null}}
   if(S.build&&Date.now()>=S.build.end)moved();
   S.ev-=dt;if(S.ev<=0){event();S.ev=60+Math.random()*60}
-  accT+=dt;if(accT>=5){const f=(a,b)=>a?a*.6+b/accT*.4:b/accT;S.rate=f(S.rate,acc.i);S.exp=f(S.exp,acc.w+acc.e);S.fw=(S.fw||[]).concat(accN/accT).slice(-24);S.fm=S.fw.reduce((x,y)=>x+y,0)/S.fw.length;accN=0;
+  accT+=dt;if(accT>=5){const f=(a,b)=>a?a*.6+b/accT*.4:b/accT;S.rate=f(S.rate,acc.i);S.exp=f(S.exp,acc.w+acc.e);S.fw=(S.fw||[]).concat(accN/accT).slice(-60);S.fm=S.fw.reduce((x,y)=>x+y,0)/S.fw.length;accN=0;
     for(const k in acc)S.stat[k]=f(S.stat[k],acc[k]);acc={i:0,w:0,e:0,p:0};accT=0}
   if(S.money>S.best)S.best=S.money;
 }
