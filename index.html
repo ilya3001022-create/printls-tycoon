@@ -153,6 +153,45 @@ const IMP=[ // обустройство: шаги между переездам�
  ['Чистая зона','Лаборатория ОТК','Склад на 1000 мест','Своя котельная'],
  ['Цех литья','Робот-упаковщик','Свой автопарк','Экспортный склад']];
 const IMP_K=[.03,.1,.25,.5],IMP_B=.03; // доля цены следующего переезда; прибавка к цене за шаг
+// ---------- исследования и бизнесы-спутники (данные: новый пункт — одна строка) ----------
+// RS: key — на что влияет (см. mod), per — прибавка за уровень, lv — с какой площадки, c0 — цена 1-го уровня (≈ 7 мин спроса площадки), t0 — время 1-го уровня, с. Уровень n: цена c0·3^n, время t0·2^n
+const RS_MAX=5,RS_PR=3,RS_TM=2,RS_GEM=5; // уровней; рост цены; рост времени; 1 💎 ускоряет на 5 мин
+const RS=[
+ {id:'speed',n:'Печать быстрее',ic:'⚡',key:'print',per:.05,max:RS_MAX,lv:1,c0:24000,t0:120},
+ {id:'noz06',n:'Сопло 0,6 мм',ic:'🔩',key:'print',per:.04,max:RS_MAX,lv:1,c0:30000,t0:120},
+ {id:'nozh',n:'Закалённое сопло',ic:'🛠',key:'price',per:.03,max:RS_MAX,lv:2,c0:80000,t0:150},
+ {id:'dryer',n:'Сушилка филамента',ic:'♨️',key:'otk',per:.06,max:RS_MAX,lv:4,c0:480000,t0:150},
+ {id:'ams',n:'AMS: мультицвет',ic:'🎨',key:'price',per:.04,max:RS_MAX,lv:2,c0:100000,t0:180},
+ {id:'acal',n:'Автокалибровка',ic:'📐',key:'otk',per:.06,max:RS_MAX,lv:4,c0:600000,t0:180},
+ {id:'fsw',n:'ПО фермы',ic:'💾',key:'cap',per:.06,max:RS_MAX,lv:3,c0:160000,t0:150},
+ {id:'otkt',n:'Обучение ОТК',ic:'🎓',key:'otk',per:.08,max:RS_MAX,lv:4,c0:480000,t0:120},
+ {id:'fpack',n:'Быстрая упаковка',ic:'📦',key:'pack',per:.06,max:RS_MAX,lv:2,c0:80000,t0:120},
+ {id:'logi',n:'Логистика',ic:'🚚',key:'road',per:.05,max:RS_MAX,lv:3,c0:160000,t0:120},
+ {id:'seo',n:'SEO маркетплейса',ic:'🔎',key:'demand',per:.05,max:RS_MAX,lv:2,c0:90000,t0:150},
+ {id:'ads',n:'Реклама',ic:'📢',key:'demand',per:.06,max:RS_MAX,lv:3,c0:200000,t0:180}];
+// SAT: бизнесы рядом с фермой. lv — площадка, c — цена 1-го уровня (≈ 2 мин спроса площадки), дальше ×2,5 за уровень, per — бонус за уровень (у parts минус = дешевле), inc — доход ₽/с за уровень
+const SAT_MAX=10,SAT_PR=2.5;
+const SAT=[
+ {id:'pvz',n:'ПВЗ',ic:'📮',lv:2,c:24000,key:'road',per:.04,inc:6},
+ {id:'spare',n:'Магазин запчастей',ic:'🔩',lv:3,c:48000,key:'parts',per:-.05,inc:12},
+ {id:'mall',n:'Точка в ТЦ',ic:'🏬',lv:3,c:48000,key:'price',per:.02,inc:12},
+ {id:'show',n:'Шоурум',ic:'🖼',lv:4,c:144000,key:'demand',per:.03,inc:0},
+ {id:'expo',n:'Выставки',ic:'🎪',lv:5,c:432000,key:'demand',per:.02,inc:0}];
+const MOD_T={print:'скорость печати',price:'цена изделий',otk:'скорость ОТК',cap:'тележки',pack:'скорость упаковки',road:'скорость рейсов',demand:'спрос',parts:'цена запчастей',walk:'скорость людей'};
+// общий множитель от исследований и бизнесов; пусто → ровно 1. road и pack делят время, parts умножает цену
+const mod=k=>{let m=1;for(const r of RS)if(r.key===k){const l=S.rs&&S.rs[r.id];if(l)m*=1+r.per*l}
+  for(const q of SAT)if(q.key===k){const l=S.sat&&S.sat[q.id];if(l)m*=1+q.per*l}
+  return k==='parts'?Math.max(.3,m):m};
+const rsLv=r=>(S.rs&&S.rs[r.id])||0;
+const rsCost=r=>r.c0*Math.pow(RS_PR,rsLv(r));
+const rsTime=r=>r.t0*Math.pow(RS_TM,rsLv(r)); // с реального времени
+const rsLeft=()=>{const q=S.rq;if(!q)return 0;if(q.dur)q.end=Math.min(q.end,Date.now()+q.dur*1000);return Math.max(0,(q.end-Date.now())/1000)}; // остаток, с; не больше длительности (сбитые часы)
+const rsGem=()=>S.rq?Math.max(1,Math.ceil(rsLeft()/60/RS_GEM)):0;
+const rsDone=()=>{const q=S.rq;if(!q||Date.now()<q.end)return;const r=RS.find(x=>x.id===q.id);S.rq=null;if(!r)return;S.rs[r.id]=rsLv(r)+1;
+  toast('🔬 Исследование «'+r.n+'» готово: уровень '+S.rs[r.id]);if(typeof render==='function')render()};
+const satLv=q=>(S.sat&&S.sat[q.id])||0;
+const satCost=q=>q.c*Math.pow(SAT_PR,satLv(q));
+const satInc=()=>SAT.reduce((a,q)=>a+q.inc*satLv(q),0); // пассивный доход, ₽/с
 const OTK_LV=4; // ОТК появляется только в цехе на 150 принтеров
 const POST_LV=3; // постобработка — с мастерской
 const ROLE={op:{n:'Операторы',one:'оператор',d:'снимают готовые столы с принтеров',ic:'🧑‍🔧'},
@@ -208,6 +247,7 @@ const PARTS=[ // запчасти: цена ₽ (ориентир — Ozon/AliEx
  {k:'therm',n:'Термистор',c:400},{k:'belt',n:'Ремень GT2',c:500},{k:'pei',n:'PEI-лист',c:2500},{k:'ptfe',n:'PTFE-трубка',c:300},
  {k:'board',n:'Плата управления',c:6000},{k:'hotend',n:'Хотенд в сборе',c:4000}];
 const PT_=k=>PARTS.find(x=>x.k===k);
+const ptC=pt=>pt.c*mod('parts'); // цена запчасти с бонусом «Магазина запчастей»
 const FAULTS=[ // n — что случилось, p — нужная запчасть (null — чинится руками), w — частота; lift — отлип, ender/bambu/cf/ams — где бывает
  {n:'Спагетти: деталь оторвалась от стола',p:null,w:30,lift:1},{n:'Застряла нить в AMS',p:null,w:8,ams:1},
  {n:'Засор сопла',p:'noz',w:14,feed:1},{n:'Засор сопла на карбоне',p:'nozh',w:12,cf:1},{n:'Сгорел вентилятор обдува',p:'fan',w:6},
@@ -222,14 +262,14 @@ function pickFault(x){const en=x.t===0,cf=/CF/.test(PX(x).m);let tot=0,base=0;co
 // починить: запчасть со склада; игрок может срочно купить (+20%), снабженец — докупает сам (+10%)
 function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   if(f&&f.p){const pt=PT_(f.p);if((S.parts[f.p]||0)>0)S.parts[f.p]--;
-    else if(!auto&&S.money>=pt.c*1.2){spend(pt.c*1.2,'p');toast('🚚 Срочно купил «'+pt.n+'» за '+fm(pt.c*1.2)+' и починил')}
-    else if(auto&&S.mg.sup&&S.money>=pt.c*1.1)spend(pt.c*1.1,'p');
-    else{if(!auto)toast('🔧 Нужна запчасть «'+pt.n+'» ('+fm(pt.c)+') — Магазин → Запчасти');return false}}
+    else if(!auto&&S.money>=ptC(pt)*1.2){spend(ptC(pt)*1.2,'p');toast('🚚 Срочно купил «'+pt.n+'» за '+fm(ptC(pt)*1.2)+' и починил')}
+    else if(auto&&S.mg.sup&&S.money>=ptC(pt)*1.1)spend(ptC(pt)*1.1,'p');
+    else{if(!auto)toast('🔧 Нужна запчасть «'+pt.n+'» ('+fm(ptC(pt))+') — Магазин → Запчасти');return false}}
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.19.3'; // номер версии подставляет release.sh
-const KEY='printls_tycoon',VER=17; // ключ больше не меняется; формат — по полю ver и миграциям
+const APPV='0.20'; // номер версии подставляет release.sh
+const KEY='printls_tycoon',VER=18; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
 let S, acc={i:0,w:0,e:0,p:0}, accT=0, accN=0;
@@ -237,7 +277,7 @@ const role=()=>({n:0,pl:0,lv:0,a:0});
 const fresh=(rep=0,all=0,best=0)=>({money:3000,gems:0,run:0,all,best,rep,loc:0,racks:1,pr:[{t:0,p:0,st:'run',ft:0}],cnt:[1],prod:0,unl:[true],pl:1500,
   q:{post:0,otk:0,pack:0,ship:0},qc:{post:0,otk:0,pack:0,ship:0},team:{op:role(),pack:role(),ship:role(),otk:role(),post:role()},mg:{},up:{},
   cl:{},cb:0,build:null,gt:0,daily:null,boostT:0,boostCD:0,offer:null,emT:0,lowpl:0,snd:1,mus:1,eco:0,broke:0,
-  order:null,board:[],ag:{op:[],pack:[],ship:[]},qb:{post:{},otk:{},pack:{},ship:{}},rk:[],mp:{},ns:0,star:4.5,seen:{},parts:{noz:2,ptfe:1},trash:0,dq:null,bf:{},gcd:{},cv:0,cf:0,cbd:0,cbuy:0,imp:0,impB:0,out:0,ev:90,last:Date.now(),rate:0,exp:0,stat:{i:0,w:0,e:0,p:0},made:0,rej:0,intro:false,t0:Date.now()});
+  order:null,board:[],ag:{op:[],pack:[],ship:[]},qb:{post:{},otk:{},pack:{},ship:{}},rk:[],mp:{},ns:0,star:4.5,seen:{},parts:{noz:2,ptfe:1},trash:0,dq:null,bf:{},gcd:{},cv:0,cf:0,cbd:0,cbuy:0,imp:0,impB:0,out:0,ev:90,last:Date.now(),rs:{},rq:null,sat:{},rate:0,exp:0,stat:{i:0,w:0,e:0,p:0},made:0,rej:0,intro:false,t0:Date.now()});
 
 // ---------- формулы ----------
 const P=()=>PR[S.prod];
@@ -246,8 +286,8 @@ const stages=()=>[...(S.loc>=POST_LV?['post']:[]),...(S.loc>=OTK_LV?['otk']:[]),
 const roles=()=>['op',...stages()];
 const ST_FIX=['post','otk']; // участки, где люди стоят у стола (без хождения)
 const qAll=()=>S.q.post+S.q.otk+S.q.pack+S.q.ship; // деталей на всех столах
-const spd=()=>(1+.1*(S.up.speed||0))*(S.mg.ai?1.1:1)*(S.mg.srv?1.15:1)*(S.bf&&S.bf.spd>0?1.25:1);
-const pm=()=>Lc().m*(1+IMP_B*S.imp)*(1+.1*S.rep)*(1+S.cb)*(1+.05*(S.up.ams||0))*(S.loc>=POST_LV?BAL.postP:1)*(S.boostT>0?2:1);
+const spd=()=>(1+.1*(S.up.speed||0))*(S.mg.ai?1.1:1)*(S.mg.srv?1.15:1)*(S.bf&&S.bf.spd>0?1.25:1)*mod('print');
+const pm=()=>Lc().m*(1+IMP_B*S.imp)*(1+.1*S.rep)*(1+S.cb)*(1+.05*(S.up.ams||0))*(S.loc>=POST_LV?BAL.postP:1)*(S.boostT>0?2:1)*mod('price');
 const TRASH_MAX=30; // куча мусора: каждые 25 деталей +1; больше 15 — грязно, брак растёт
 const dirt=()=>Math.max(0,((S.trash||0)-15)/5); // +1% брака за каждые 5 пакетов сверх 15
 const defect=()=>Math.min(30,Math.max(1,10-(S.up.cal||0)-(S.bf&&S.bf.cal>0?3:0))+dirt())/100; // брак 10% у новичка (как у Ильи), калибровка до 2%
@@ -283,18 +323,18 @@ const front=i=>{const L=lay();let FR=FRM.get(layK);if(!FR)FRM.set(layK,FR=[]);if
 // маршрут по проходам: вдоль ряда, потом по левому проходу x=.22, потом вдоль ряда к цели
 const route=(a,b)=>Math.abs(a[1]-b[1])<.05?[b]:[[.22,a[1]],[.22,b[1]],b];
 const plen=(a,pts)=>{let d=0,c=a;for(const q of pts){d+=Math.abs(q[0]-c[0])+Math.abs(q[1]-c[1]);c=q}return d};
-const vOf=k=>BAL.walk[k]*Math.pow(BAL.walkLv,S.team[k].lv)*(1+.25*(S.up.conv||0))*(S.broke?.5:1);
-const capOf=k=>Math.round((BAL.cap[k]+BAL.capLv[k]*S.team[k].lv+(k==='ship'?4*(S.up.van||0):0))*(k==='op'?1+.5*(S.up.farmsw||0):1));
-const road=()=>BAL.road[S.loc]*(night()?BAL.roadNight:1)/(1+.1*(S.up.conv||0));
+const vOf=k=>BAL.walk[k]*Math.pow(BAL.walkLv,S.team[k].lv)*(1+.25*(S.up.conv||0))*(S.broke?.5:1)*mod('walk');
+const capOf=k=>{const b=(BAL.cap[k]+BAL.capLv[k]*S.team[k].lv+(k==='ship'?4*(S.up.van||0):0))*(k==='op'?1+.5*(S.up.farmsw||0):1),m=mod('cap');return m>1?Math.ceil(b*m-1e-9):Math.round(b)}; // бонус ПО фермы округляем вверх, чтобы каждый уровень был виден
+const road=()=>BAL.road[S.loc]*(night()?BAL.roadNight:1)/(1+.1*(S.up.conv||0))/mod('road');
 const OPT=new Map(); // средний рейс оператора туда-обратно — для офлайна и подсказок; кэш по раскладке
 function opTrip(){const L=lay(),k=layK+':'+stages()[0]+':'+Math.min(L.VR*6,S.pr.length);if(OPT.has(k))return OPT.get(k);let opD;const t=L.drop[stages()[0]];let d=0;const n=Math.min(L.VR*6,Math.max(1,S.pr.length));
   for(let i=0;i<n;i++){const f=front(i);d+=plen(t,route(t,f))+plen(f,route(f,t))}opD=d/n;OPT.set(k,opD);return opD}
 // шт/с участка: считается из тех же шагов, грузов и рейсов, что делают человечки
 const sr=k=>{const r=S.team[k],n=r.n;if(!n)return 0;
-  if(ST_FIX.includes(k))return n*BAL.rate[k]*Math.pow(1.3,r.lv)*(1+.25*(S.up.conv||0))*(S.broke?.5:1);
+  if(ST_FIX.includes(k))return n*BAL.rate[k]*Math.pow(1.3,r.lv)*(1+.25*(S.up.conv||0))*(S.broke?.5:1)*(k==='otk'?mod('otk'):1);
   const c=capOf(k);
   if(k==='op')return n*c/(c*BAL.load*2+opTrip()/vOf('op'));
-  if(k==='pack'){const L=lay();return n*c/(c*(BAL.packT+BAL.load)+2*plen(L.sPack,[L.sDock])/vOf('pack'))}
+  if(k==='pack'){const L=lay();return n*c/(c*(BAL.packT/mod('pack')+BAL.load)+2*plen(L.sPack,[L.sDock])/vOf('pack'))}
   return n*c/(c*BAL.load+road())};
 const maxPr=()=>Math.min(S.racks*6,Lc().max);
 const pcost=t=>PT[t].c*Math.pow(BAL.pcF,S.cnt[t]||0);
@@ -309,7 +349,7 @@ const impC=()=>(LOC[S.loc+1]?LOC[S.loc+1].c:LOC[5].c*20)*IMP_K[impN()];
 const MP_LV=2; // маркетплейсы — с мини-офиса
 const starT=()=>Math.max(1,Math.min(5,5.6-30*defect())); // к какому рейтингу тянется магазин: брак 10% → ★2,6, 2% (всё прокачано) → ★5
 const starM=()=>S.loc>=MP_LV?.5+.12*(S.star||4.5):1;    // спрос от рейтинга: ★5 → ×1,1, ★2 → ×0,74
-const demand=()=>BAL.dem[S.loc]*(1+BAL.mkt*(S.up.mkt||0))*(1+S.cb)*starM()*(S.boostT>0?2:1);
+const demand=()=>BAL.dem[S.loc]*(1+BAL.mkt*(S.up.mkt||0))*(1+S.cb)*starM()*(S.boostT>0?2:1)*mod('demand');
 const prestGain=()=>S.loc<5?0:Math.floor(Math.sqrt(S.run/1e8));
 function dur(s){s=Math.max(0,Math.floor(s));const d=s/86400|0,h=(s%86400)/3600|0,m=(s%3600)/60|0;return d?d+' д '+h+' ч':h?h+' ч '+m+' мин':m?m+' мин':s+' с'}
 function fm(x){x=Math.floor(x);const a=Math.abs(x);if(a<1e4)return x.toLocaleString('ru-RU')+' ₽';
@@ -393,7 +433,7 @@ function stepPack(a,dt){const L=lay(),v=vOf('pack'),c=capOf('pack');
   for(let g=0;g<40&&dt>1e-9;g++){
     if(a.w>0){const u=Math.min(a.w,dt);a.w-=u;dt-=u;continue}
     if(a.st==='pack'){
-      if(a.c<c&&S.q.pack>=1){const need=BAL.packT-a.t;if(dt>=need){dt-=need;a.t=0;a.b=a.b||{};bMix(a.b,qTake('pack',1));a.c++;continue}a.t+=dt;return}
+      if(a.c<c&&S.q.pack>=1){const need=BAL.packT/mod('pack')-a.t;if(dt>=need){dt-=need;a.t=0;a.b=a.b||{};bMix(a.b,qTake('pack',1));a.c++;continue}a.t+=dt;return}
       if(a.c&&a.c<c&&(a.iw||0)<2){const u=Math.min(dt,2-(a.iw||0));a.iw=(a.iw||0)+u;dt-=u;continue} // ждёт до 2 с, вдруг поднесут ещё
       if(a.c){a.iw=0;a.path=[L.sDock];a.st='go';continue}return}
     if(a.path.length){const r=walkTo(a,dt,v);if(r<0)return;dt=r}
@@ -430,6 +470,7 @@ function fillBoard(){while(S.board.length<3){let o,k=0;do o=newOrd();while(k++<6
 function supply(){const p=P(),need=p.g*S.pr.length*2;if(S.pl>=need)return;
   const price=plPrice()*1.1;let kg=Math.ceil((need*2-S.pl)/1000);kg=Math.min(kg,Math.floor(S.money/price));if(kg>0){spend(kg*price,'p');S.pl+=kg*1000}}
 function tick(dt){
+  rsDone();{const si=satInc();if(si)earn(si*dt,1)} // исследование по таймеру и доход бизнесов
   {const D=demand();S.dm=Math.min((S.dm||0)+D*dt,D*120);S.ds=Math.min((S.ds||0)+D*dt,D*120)}
   for(let i=S.board.length-1;i>=0;i--){const b=S.board[i];if(b.got<b.need&&(b.left-=dt)<=0){S.board.splice(i,1);if(S.loc>=MP_LV){S.star=Math.max(1,(S.star||4.5)-.15);toast('⭐ Заказ «'+b.n+'» сорван — рейтинг магазина −0,15')}}} // клиент не дождался — уходит к другим
   if(S.board.length<3)fillBoard();
@@ -455,7 +496,7 @@ function tick(dt){
   if(S.money<0){S.money=0;if(!S.broke){S.broke=1;toast(wages()?'💸 Нечем платить зарплату — люди работают вполсилы. Уволь лишних или подними доход':'💡 Нечем платить за свет — отвези готовое, чтобы заработать');sound('bad')}}else if(S.money>w*50)S.broke=0;
   // выручка запчастью: все принтеры стоят из-за поломок, а на запчасть денег нет — сосед/знакомый даёт бесплатно (раз в 2 мин)
   {const br=S.pr.filter(x=>x.st==='fail'&&FAULTS[x.fk||0].p);if(br.length&&!S.pr.some(x=>x.st==='run'||x.st==='done')&&S.emT<=0){const pk=FAULTS[br[0].fk||0].p,pt=PT_(pk);
-    if(!(S.parts[pk]>0)&&S.money<pt.c*1.2&&qAll()*mix().p*pm()+S.money<pt.c*1.2){S.parts[pk]=(S.parts[pk]||0)+1;S.emT=120;toast('🤝 Знакомый выручил: дал «'+pt.n+'» бесплатно. Держи запас запчастей!')}}}
+    if(!(S.parts[pk]>0)&&S.money<ptC(pt)*1.2&&qAll()*mix().p*pm()+S.money<ptC(pt)*1.2){S.parts[pk]=(S.parts[pk]||0)+1;S.emT=120;toast('🤝 Знакомый выручил: дал «'+pt.n+'» бесплатно. Держи запас запчастей!')}}}
   // аварийная катушка: без пластика и без денег игра не должна умирать
   if(S.emT>0)S.emT-=dt;
   if(S.pl<p.g&&S.money<plPrice()&&qAll()*mix().p*pm()+S.money<plPrice()&&!S.pr.some(x=>x.st==='run'||x.st==='done')&&S.emT<=0){S.pl+=500;S.emT=60;toast('🧵 Аварийная катушка 0,5 кг — бесплатно. Оставляй деньги на пластик!')}
@@ -503,7 +544,7 @@ function offline(){
   const p=mix(),per=p.p*pm()*(1-defect()),flow=flowOff(),sum=S.pr.reduce((a,x)=>a+PT[x.t].sp,0),pr=prodRate();
   let pcs=flow*el*(S.mg.srv?1:.5);if(!S.mg.sup){pcs=Math.min(pcs,S.pl/p.g);S.pl=Math.max(0,S.pl-pcs*p.g)}
   const Dk=demand()*el*(S.mg.srv?1:.5),rv=pcs*per,sold=Math.min(rv,Dk)+Math.min(Math.max(0,rv-Dk),Dk)*BAL.sale+Math.max(0,rv-2*Dk)*BAL.bulkSale; // спрос и в офлайне
-  let g=Math.max(0,sold-(wagesAvg()+sum*(pr?flow/pr:0)*elecK())*el*(S.mg.srv?1:.5));
+  rsDone();let g=Math.max(0,sold-(wagesAvg()+sum*(pr?flow/pr:0)*elecK())*el*(S.mg.srv?1:.5))+satInc()*el; // бизнесы-спутники работают и без игрока
   if(!flow&&S.made&&typeof modal==='function')modal('😴 Тебя не было '+dur(raw),'Ферма стояла: без людей готовые детали никто не снимает, не пакует и не возит.<br><br>Найми оператора, упаковщика и курьера во вкладке «Люди» — они работают и без тебя.');
   if(g>0){S.made+=Math.floor(pcs);
     earn(g,1);modal('😴 Тебя не было '+dur(raw),'Ферма заработала <b>'+fm(g)+'</b> (за вычетом зарплат и света)'+(raw>max?'<br><span class="sub">Склад полон: копится не больше '+dur(max)+'</span>':'')+
@@ -531,7 +572,9 @@ const skipCost=()=>S.build?Math.max(1,Math.ceil((S.build.end-Date.now())/60000/B
 // ---------- сохранение ----------
 // старые сохранения: v6 и v7 совместимы по изделиям; более ранние — другая экономика, их не тянем
 const OLDC=[40000,800000,12e6,1.8e9,110e9,110e9],NEWC=[20000,250000,2.5e6,20e6,200e6,200e6]; // цены следующего переезда до/после перехода на рубли
-const MIG={6:s=>{s.ag={op:[],pack:[],ship:[]};return s},7:s=>s,
+const MIG={
+  17:s=>{s.rs=s.rs||{};s.rq=s.rq||null;s.sat=s.sat||{};return s}, // исследования и бизнесы-спутники
+  6:s=>{s.ag={op:[],pack:[],ship:[]};return s},7:s=>s,
   16:s=>{if((s.loc||0)>=3&&s.team&&s.team.pack){const p=s.team.pack;s.team.post={n:Math.max(1,p.n),pl:Math.max(1,p.pl,p.n),lv:p.lv||0,a:0};s.qc=s.qc||{};s.qc.post=(s.qc.pack||0)} // постобработка: уже переехавшим — бригада под размер упаковки, ферма не встаёт
     return s},
   15:s=>{s.mus=1;return s}, // музыка по умолчанию — тихо, выключается в «Росте»
@@ -659,8 +702,8 @@ let MB=[],MQ=[]; // окна не перекрывают друг друга, а
 function modal(h,b,btns){if($('mod').innerHTML){MQ.push([h,b,btns]);return}MB=btns||[{t:'OK'}];$('mod').innerHTML='<div class="modal"><div class="card"><h3>'+h+'</h3><p>'+b+'</p><div class="row" style="justify-content:flex-end">'+
   MB.map((x,i)=>'<button class="btn'+(x.sec?' sec':'')+'" data-a="mb" data-i="'+i+'">'+x.t+'</button>').join('')+'</div></div></div>'}
 let tab='farm',sig='';
-const TABS=[['farm','🖨','Цех'],['chain','🔗','Участки'],['shop','🛒','Магазин'],['team','👥','Люди'],['grow','📈','Рост']];
-const TAB_IC={farm:'tab_farm',chain:'tab_chain',shop:'tab_shop',team:'tab_team',grow:'tab_grow'};
+const TABS=[['farm','🖨','Цех'],['chain','🔗','Участки'],['shop','🛒','Магазин'],['team','👥','Люди'],['rs','🔬','Наука'],['sat','🏪','Бизнес'],['grow','📈','Рост']];
+const TAB_IC={farm:'tab_farm',chain:'tab_chain',shop:'tab_shop',team:'tab_team',grow:'tab_grow',rs:'tab_rs',sat:'tab_sat'};
 const PR_IC=['keychain','magnet','stand','planter','organizer','figurine','chess','toolholder','lamp','gear','enclosure','bracket','autopart','sensor','drone','satellite','batch'];
 const ICS=window.ART&&ART.icons||{};
 const PICS=window.ART&&ART.pics||{},pic=(k,cl)=>PICS[k]?'<img class="'+cl+'" src="'+PICS[k]+'" alt="">':''; // заставка, площадки, портреты клиентов
@@ -669,7 +712,8 @@ const icn=(k,sm)=>ICS[k]?'<i class="ic'+(sm?' sm':'')+' i-'+k+'"></i>':''; // sm
 // новичку системы открываются по одной (урок Idle Police: «всё сразу — непонятно»); открытое не закрывается
 const GATE={shop:['🛒 Магазин',()=>S.made>=5||S.pr.length>1],board:['📋 Заказы',()=>S.made>=15],chain:['🔗 Участки',()=>S.made>=12||tm('pack')],
   team:['👥 Люди',()=>S.made>=20],boost:['📣 Реклама',()=>S.made>=25],clients:['🤝 Крупные клиенты',()=>S.made>=30],grow:['📈 Рост',()=>S.made>=40||S.loc>0],
-  games:['🎮 Мини-игры',()=>S.made>=60||S.loc>0],dq:['📅 Задания дня',()=>S.made>=80||S.loc>0]};
+  games:['🎮 Мини-игры',()=>S.made>=60||S.loc>0],dq:['📅 Задания дня',()=>S.made>=80||S.loc>0],
+  rs:['🔬 Исследования',()=>S.loc>=1&&S.made>=50],sat:['🏪 Бизнесы',()=>S.loc>=2&&S.made>=100]};
 const opn=k=>!!(S.seen&&S.seen[k]); // система уже открыта
 function gates(){let nw=0;for(const k in GATE)if(!opn(k)&&GATE[k][1]()){S.seen=S.seen||{};S.seen[k]=1;nw=1;toast('✨ Открыто: '+GATE[k][0])}if(nw)render()}
 const TRN={op:'Обучить: шаг +10%, тележка +1',pack:'Обучить: шаг +10%, тележка +1',ship:'Обучить: фургон +4 места',otk:'Обучить +30%',post:'Обучить +30%'};
@@ -714,6 +758,9 @@ const U={ // живые подписи, обновляются 10 раз в се
   imp:()=>{const n=impN();if(n>=4)return'<div class="sub ok">Площадка обустроена полностью: +'+Math.round(IMP_B*400)+'% к цене</div>';
     return '<div class="row"><div class="grow">'+IMP[S.loc][n]+' <span class="tag">'+n+' / 4</span><div class="sub">+'+Math.round(IMP_B*100)+'% к цене всех изделий навсегда</div></div><button class="btn" data-a="imp" data-c="'+impC()+'">'+fm(impC())+'</button></div>'},
   boost:()=>S.boostT>0?'📣 Реклама ×2 · ещё '+Math.ceil(S.boostT)+' с':S.boostCD>0?'📣 ×2 через '+dur(S.boostCD):'📣 Реклама: доход ×2 на 2 мин',
+  rqt:()=>S.rq?dur(rsLeft()):'',
+  rqg:()=>'Ускорить · 💎 '+rsGem(),
+  sinc:()=>fm(satInc()*60)+'/мин',
   bldt:()=>S.build?dur((S.build.end-Date.now())/1000):'',
   bld:()=>{const b=S.build;if(!b)return'';
     return '🏗 Стройка: '+LOC[b.to].n+' · осталось <span data-u="bldt"></span><div class="bar"><i data-w="bld"></i></div>'+
@@ -770,8 +817,8 @@ function view(){
     ${lk?lockTxt(t.lv):`<button class="btn" data-a="buyp" data-i="${i}" data-c="${c}" ${full&&!repl?'disabled data-lock':''}>${repl?'Заменить худший · ':''}${fm(c)}</button>`}</div>`});
    {const need={};S.pr.forEach(x=>{if(x.st==='fail'){const p=FAULTS[x.fk||0].p;if(p)need[p]=(need[p]||0)+1}});
     h+='<h3 style="margin-top:14px">🔧 Запчасти <span class="sub">— со склада чинит ремонтник; без запчасти — срочная доставка +20%</span></h3>';
-    PARTS.forEach(pt=>{const n=S.parts[pt.k]||0;h+=`<div class="card row">${icn(pt.k)}<div class="grow"><b>${pt.n}</b> <span class="tag${need[pt.k]?' bad':''}">на складе ${n}</span>${need[pt.k]?` <span class="tag bad">ждут ${need[pt.k]}</span>`:''}<div class="sub">${fm(pt.c)} за шт</div></div>
-     <button class="btn sec" data-a="part" data-i="${pt.k}:1" data-c="${pt.c}">+1</button><button class="btn sec" data-a="part" data-i="${pt.k}:5" data-c="${pt.c*4.5}">+5 · ${fm(pt.c*4.5)}</button></div>`})}
+    PARTS.forEach(pt=>{const n=S.parts[pt.k]||0;h+=`<div class="card row">${icn(pt.k)}<div class="grow"><b>${pt.n}</b> <span class="tag${need[pt.k]?' bad':''}">на складе ${n}</span>${need[pt.k]?` <span class="tag bad">ждут ${need[pt.k]}</span>`:''}<div class="sub">${fm(ptC(pt))} за шт</div></div>
+     <button class="btn sec" data-a="part" data-i="${pt.k}:1" data-c="${ptC(pt)}">+1</button><button class="btn sec" data-a="part" data-i="${pt.k}:5" data-c="${ptC(pt)*4.5}">+5 · ${fm(ptC(pt)*4.5)}</button></div>`})}
    h+='<h3 style="margin-top:14px">Что печатаем</h3>';
    PR.forEach((x,i)=>{const on=S.unl[i],lk=x.lv>S.loc;if(x.lv>S.loc+1)return;
     h+=`<div class="card row${i===S.prod?' sel':''}">${icn(PR_IC[i])}<div class="grow"><b>${x.n}</b> <span class="tag">${x.m}</span><div class="sub">${fm(x.p*pm())} за шт · ${x.t} с · ${x.g} г · ${fm(x.p*pm()/x.t*60)}/мин с Ender</div></div>
@@ -782,6 +829,17 @@ function view(){
    <button class="btn${S.ns?'':' sec'}" data-a="ns">${S.ns?'Включена':'Выключена'}</button></div>`+
    roles().map(roleCard).join('')+'<h3 style="margin-top:14px">Специалисты</h3>'+MG.map((g,i)=>
    `<div class="card row"><div class="grow"><b>${g.n}</b><div class="sub">${g.d}</div></div>${S.mg[g.k]?'<span class="tag auto">в штате</span>':g.lv>S.loc?lockTxt(g.lv):`<button class="btn" data-a="mg" data-i="${i}" data-c="${g.c}">${fm(g.c)}</button>`}</div>`).join('');
+  if(tab==='rs'){const eff=(k,per,l)=>'+'+Math.round(per*100*l*10)/10+'% · '+MOD_T[k];
+    return '<h3>🔬 Лаборатория</h3><div class="sub" style="margin-bottom:8px">Одно исследование за раз. Таймер идёт и пока игра закрыта.</div>'+
+    (S.rq?(()=>{const r=RS.find(x=>x.id===S.rq.id);return '<div class="card"><b>'+r.ic+' '+r.n+'</b> → ур. '+(rsLv(r)+1)+' · осталось <span data-u="rqt"></span><div class="bar"><i data-w="rq"></i></div>'+
+      '<div class="row" style="margin-top:6px;justify-content:flex-end"><button class="btn" data-a="rsskip" data-u="rqg"'+(S.gems>=rsGem()?'':' disabled')+'></button></div></div>'})():'')+
+    RS.map(r=>{const l=rsLv(r),on=S.rq&&S.rq.id===r.id,c=rsCost(r);
+      return '<div class="card row"><div class="grow"><b>'+r.ic+' '+r.n+'</b> <span class="tag">'+l+' / '+r.max+'</span><div class="sub">'+eff(r.key,r.per,l||1)+(l?' (сейчас)':' за 1 ур.')+(l<r.max&&r.lv<=S.loc?' · '+dur(rsTime(r)):'')+'</div></div>'+
+      (r.lv>S.loc?lockTxt(r.lv):l>=r.max?'<span class="tag auto">макс</span>':on?'<span class="tag">идёт</span>':'<button class="btn" data-a="rs" data-i="'+r.id+'" data-c="'+c+'"'+(S.rq?' data-lock="1" disabled':'')+'>Исследовать · '+fm(c)+'</button>')+'</div>'}).join('')}
+  if(tab==='sat')return '<h3>🏪 Бизнесы</h3><div class="sub" style="margin-bottom:8px">Свои точки рядом с фермой: дают бонус и приносят деньги, даже когда тебя нет. Сейчас: <b data-u="sinc"></b></div>'+
+    SAT.map(q=>{const l=satLv(q),sg=q.per>0?'+':'−';
+      return '<div class="card row"><div class="grow"><b>'+q.ic+' '+q.n+'</b> <span class="tag">'+l+' / '+SAT_MAX+'</span><div class="sub">'+sg+Math.round(Math.abs(q.per)*1000)/10+'% за ур. · '+MOD_T[q.key]+(q.inc?' · +'+fm(q.inc*60)+'/мин за ур.':'')+(l?' · сейчас '+sg+Math.round(Math.abs(q.per)*l*1000)/10+'%'+(q.inc?', '+fm(q.inc*l*60)+'/мин':''):'')+'</div></div>'+
+      (q.lv>S.loc?lockTxt(q.lv):l>=SAT_MAX?'<span class="tag auto">макс</span>':'<button class="btn" data-a="sat" data-i="'+q.id+'" data-c="'+satCost(q)+'">'+(l?'Улучшить':'Открыть')+' · '+fm(satCost(q))+'</button>')+'</div>'}).join('')
   if(tab==='grow'){let h='<h3>Улучшения</h3>'+UP.map((u,i)=>{const l=S.up[u.k]||0;if(['klipper','bltouch','dd'].includes(u.k)&&!(S.cnt[0]>0)&&!l)return''; // моды Эндера — пока они есть
     return `<div class="card row"><div class="grow"><b>${u.n}</b> <span class="tag">${u.max>=999?l+" ур.":l+" / "+u.max}</span><div class="sub">${u.d}</div></div>${u.lv>S.loc?lockTxt(u.lv):l>=u.max?'<span class="tag auto">макс</span>':`<button class="btn" data-a="up" data-i="${i}" data-c="${upcost(u)}">${fm(upcost(u))}</button>`}</div>`}).join('');
    const nl=LOC[S.loc+1];
@@ -803,10 +861,11 @@ function upd(){backBtn();gates();
   $('loc').textContent=Lc().n;
   const h=hour();$('rep').innerHTML=(icn('gem',1)||'💎 ')+S.gems+' · '+(night()?'🌙 ':'☀️ ')+String(h|0).padStart(2,'0')+':'+String((h%1)*60|0).padStart(2,'0')+(S.rep?' · '+(icn('star',1)||'⭐ ')+S.rep:'');
   document.querySelectorAll('[data-u]').forEach(e=>{const[a,b]=e.dataset.u.split(':'),v=U[a](b);if(e._v!==v){e.innerHTML=v;e._v=v}});
+  document.querySelectorAll('[data-a="rsskip"]').forEach(e=>{const d=S.gems<rsGem();if(e.disabled!==d)e.disabled=d});
   document.querySelectorAll('[data-c]').forEach(e=>{const d=S.money<+e.dataset.c;if(e.disabled!==d&&!e.hasAttribute('data-lock'))e.disabled=d});
   document.querySelectorAll('[data-w]').forEach(e=>{const[a,b]=e.dataset.w.split(':'),w=Math.min(100,W[a](b))+'%';if(e.style.width!==w)e.style.width=w});
 }
-const W={bo:i=>{const b=S.board[+i];return b?b.got/b.need*100:0},bld:()=>{const b=S.build;return b?100-(b.end-Date.now())/1000/BAL.bt[b.to]*100:0}};
+const W={rq:()=>{const q=S.rq,r=q&&RS.find(x=>x.id===q.id);return r?Math.max(0,100-rsLeft()/(q.dur||rsTime(r))*100):0},bo:i=>{const b=S.board[+i];return b?b.got/b.need*100:0},bld:()=>{const b=S.build;return b?100-(b.end-Date.now())/1000/BAL.bt[b.to]*100:0}};
 let fullT=0;
 const A={
   tab:i=>{tab=i;window.scrollTo(0,0)},
@@ -833,6 +892,9 @@ const A={
   up:i=>{const u=UP[i],c=upcost(u);if(S.money>=c&&(S.up[u.k]||0)<u.max&&u.lv<=S.loc){spend(c);S.up[u.k]=(S.up[u.k]||0)+1}},
   loc:()=>{const to=S.loc+1,n=LOC[to];if(!n||S.build)return;if(clDone(S.loc)<2){toast('🤝 Сначала 2 крупных клиента из 3');return}
     if(S.money>=n.c){spend(n.c);S.build={to,end:Date.now()+BAL.bt[to]*1000};toast('🏗 Начали стройку: '+n.n+'. Готово через '+dur(BAL.bt[to])+' — можно закрыть игру')}},
+  rs:id=>{const r=RS.find(x=>x.id===id),c=r&&rsCost(r);if(!r||S.rq||r.lv>S.loc||rsLv(r)>=r.max||S.money<c)return;spend(c);S.rq={id:r.id,end:Date.now()+rsTime(r)*1000,dur:rsTime(r)};toast('🔬 Начали: «'+r.n+'». Готово через '+dur(rsTime(r))+' — можно закрыть игру')},
+  rsskip:()=>{const q=S.rq,c=rsGem();if(q&&S.gems>=c){S.gems-=c;q.end=0;rsDone()}},
+  sat:id=>{const q=SAT.find(x=>x.id===id),c=q&&satCost(q);if(!q||q.lv>S.loc||satLv(q)>=SAT_MAX||S.money<c)return;spend(c);S.sat[q.id]=satLv(q)+1;toast(q.ic+' «'+q.n+'»: уровень '+S.sat[q.id])},
   skip:()=>{const c=skipCost();if(S.build&&S.gems>=c){S.gems-=c;moved()}},
   ctask:s=>{const[i,j]=s.split('.').map(Number),c=CL[S.loc][i],st=cst(i),[n,f,g]=c.t[j];if(st.t[j]||f()<g)return;st.t[j]=1;S.gems+=10;sound('coin');toast('🎯 «'+n+'» — 💎 +10')},
   cdone:i=>{const c=CL[S.loc][+i],st=cst(+i);if(st.done||!st.t.every(Boolean))return;st.done=1;earn(c.r[0],1);S.cb+=c.r[1];S.gems+=c.r[2];sound('coin');
@@ -848,13 +910,13 @@ const A={
     if(!S.dq.all&&S.dq.q.every(y=>y.cl)){S.dq.all=1;S.gems+=10;toast('🏆 Все задания дня — 💎 +10')}},
   game:k=>{if((S.gcd[k]||0)>0){toast('🎮 Эту игру можно снова через '+dur(S.gcd[k]));return}startGame(k)},
   clean:()=>{const n=S.trash||0;if(!n)return;S.trash=0;earn(n*20,1);toast('🧹 Прибрался: вынес '+n+' '+pl3(n,'пакет','пакета','пакетов')+' мусора, сдал пластик на переработку +'+fm(n*20))},
-  part:v=>{const [k,n]=v.split(':'),pt=PT_(k),c=+n===5?pt.c*4.5:pt.c;if(S.money<c)return;spend(c,'p');S.parts[k]=(S.parts[k]||0)+ +n;toast('🔧 «'+pt.n+'»: на складе '+S.parts[k])},
+  part:v=>{const [k,n]=v.split(':'),pt=PT_(k),c=+n===5?ptC(pt)*4.5:ptC(pt);if(S.money<c)return;spend(c,'p');S.parts[k]=(S.parts[k]||0)+ +n;toast('🔧 «'+pt.n+'»: на складе '+S.parts[k])},
   snd:()=>{S.snd=S.snd?0:1;audio()},
   mus:()=>{S.mus=S.mus?0:1;audio()},
   boost:()=>{if(S.boostT>0||S.boostCD>0)return;S.boostT=120;S.boostCD=600;sound('coin');toast('📣 Реклама: все цены ×2 на 2 минуты')},
   eco:()=>{S.eco=S.eco?0:1},
   prest:()=>{const g=prestGain();if(!g)return;modal('Продать бизнес?','Получишь ⭐ '+g+'. Принтеры, деньги и люди обнулятся.',
-    [{t:'Продаю',f:()=>{const d=S.daily;S=fresh(S.rep+g,S.all,S.best);S.daily=d;S.intro=true;tab='farm';render();toast('⭐ Репутация теперь '+S.rep)}},{t:'Подумаю',sec:1}])},
+    [{t:'Продаю',f:()=>{const d=S.daily,rs=S.rs,rq=S.rq;S=fresh(S.rep+g,S.all,S.best);S.daily=d;S.rs=rs;S.rq=rq;S.intro=true;tab='farm';render();toast('⭐ Репутация теперь '+S.rep)}},{t:'Подумаю',sec:1}])},
   exp:()=>{const j=JSON.stringify(S),code='PT1.'+btoa(unescape(encodeURIComponent(j)))+'.'+hsh(j).toString(36);
     try{navigator.clipboard.writeText(code);toast('📋 Код сохранения скопирован — сохрани его в «Избранное» Telegram')}catch(e){}
     modal('📋 Код сохранения','Скопирован в буфер. Если не скопировался — выдели и скопируй вручную:<br><textarea readonly style="width:100%;height:90px;margin-top:8px;background:#0f131b;color:#9fb;border:1px solid #2b3549;border-radius:8px;font-size:10px">'+code+'</textarea>')},
