@@ -1066,13 +1066,14 @@ function person(k) {
   for (const c of LIB[k].animations) act[c.name] = mix.clipAction(c);
   const p = {o, mix, act, cur: null, x: 0, z: 0, path: [], carry: false, wait: 0};
   p.play = n => { if (p.cur === n || !act[n]) return; const a = act[n].reset().fadeIn(.2).play(); if (p.cur) act[p.cur].fadeOut(.2); p.cur = n; };
-  const bx = prop('box', .75); bx.position.set(0, .3, .17); bx.visible = false; o.add(bx); p.box = bx;
+  const hh = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y; // рост модели: у мини-человечков полроста — голова
+  const bx = prop('box', .75); bx.position.set(0, hh * .2, .15); bx.visible = false; o.add(bx); p.box = bx;
   o.traverse(m => { if (m.isMesh) m.castShadow = false; });
   p.play('idle'); world.add(o); return p;
 }
 
 // ---------- сборка мира ----------
-let trashG = [], clients = [], lampL = null, lampB = null, arm = null, spools = [], cat = null, board = null, wclock = null, wins = [], puffs = [], coffeeAt = null, LS = 1, conv = [], world = null, L = null, built = '', printers = [], hits = [], people = {}, zones = {}, van = null, drone = null, server = null, flo = [];
+let trashG = [], clients = [], lampL = null, lampB = null, arm = null, spools = [], cat = null, board = null, wclock = null, wins = [], puffs = [], coffeeAt = null, LS = 1, conv = [], world = null, L = null, built = '', printers = [], hits = [], van2 = null, people = {}, zones = {}, van = null, drone = null, server = null, flo = [];
 const rackPos = rp; // раскладка общая с логикой: lay() и rp() из основного скрипта
 let prG = null, prHits = [], prKey = '';
 function buildPrinters() {
@@ -1210,6 +1211,7 @@ function build() {
   if (S.loc >= OTK_LV) mkZone(0, L.otk, L.z0, 'tray'); mkZone(1, L.pack, L.z0, 'box');
   if (S.loc >= POST_LV) mkZone(3, L.otk, L.post, 'tray');
   van = mkVan(); van.g.position.set(L.dock, 0, L.z0 + 1.65); world.add(van.g);
+  van2 = mkVan(); van2.g.position.set(L.dock, 0, L.z0 + 2.3); van2.g.visible = false; world.add(van2.g); // фургон №2 — вторая полоса дороги
   const vh = new THREE.Mesh(G(1.5, .9, .8), new THREE.MeshBasicMaterial({visible: false})); vh.userData.zone = 2; van.g.add(vh); vh.position.set(.6, .4, 0); hits.push(vh);
   zones[2] = {lb: label('', false)}; own.push(zones[2].lb.material); zones[2].lb.position.set(.75, 1.3, 0); van.g.add(zones[2].lb); // подпись фургона — ЕГО груз, едет с ним
   // склад у ворот: паллета, куда упаковщик кладёт коробки (S.q.ship); подпись стоит на месте
@@ -1302,8 +1304,8 @@ function pool(arr, n, kinds) { while (arr.length < n) arr.push(person(kinds[arr.
 // логика шагает 10 раз в секунду, кадр — 60: рисуем между прошлым и текущим тактом (интерполяция, отставание 0,1 с),
 const TKa = () => window.ALPHA || 0;
 // а «идёт / стоит» берём из состояния агента, а не из сдвига за кадр — иначе анимация мигает
-function show(p, a, dt) {
-  const al = TKa(), x0 = a.px ?? a.x, z0 = a.pz ?? a.z, tx = x0 + (a.x - x0) * al, tz = z0 + (a.z - z0) * al;
+function show(p, a, dt, i = 0) {
+  const al = TKa(), x0 = a.px ?? a.x, z0 = a.pz ?? a.z, ox = ((i % 4) - 1.5) * .12, oz = ((i >> 2) % 2) * .16, tx = x0 + (a.x - x0) * al + ox, tz = z0 + (a.z - z0) * al + oz; // свой сдвиг у каждого — не стоят друг в друге
   const dx = a.x - x0, dz = a.z - z0, moving = a.pw ?? (a.path.length > 0);
   if (Math.hypot(dx, dz) > 1e-3) { let d = Math.atan2(dx, dz) - p.o.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); p.o.rotation.y += d * Math.min(1, dt * 12); }
   p.x = tx; p.z = tz;
@@ -1350,10 +1352,13 @@ function frame() {
   const ft = f0 && f0.st === 'road' && f0.T ? (f0.pt ? f0.pt + (f0.t - f0.pt) * TKa() : f0.t) : 0;
   van.dx = ft ? (k => 5 * (k < .5 ? k * 2 : 2 - k * 2))(1 - ft / f0.T) : 0;
   van.g.position.x = L.dock + van.dx;
+  const f1 = S.ag.ship[1]; van2.g.visible = !!f1;
+  if (f1) { const t1 = f1.st === 'road' && f1.T ? (f1.pt ? f1.pt + (f1.t - f1.pt) * TKa() : f1.t) : 0; van2.g.position.x = L.dock + (t1 ? (k => 5 * (k < .5 ? k * 2 : 2 - k * 2))(1 - t1 / f1.T) : 0);
+    van2.load.forEach((b, j) => b.visible = j < Math.min(12, Math.ceil(f1.c / vc * 12))); }
   // люди
   const P_ = people;
-  pool(P_.op, S.ag.op.length, ['m1', 'm3', 'f3']); S.ag.op.forEach((a, i) => show(P_.op[i], a, dt));
-  pool(P_.pack, S.ag.pack.length, ['m2', 'f1', 'm3']); S.ag.pack.forEach((a, i) => show(P_.pack[i], a, dt));
+  pool(P_.op, S.ag.op.length, ['m1', 'm3', 'f3']); S.ag.op.forEach((a, i) => show(P_.op[i], a, dt, i));
+  pool(P_.pack, S.ag.pack.length, ['m2', 'f1', 'm3']); S.ag.pack.forEach((a, i) => show(P_.pack[i], a, dt, i));
   const no = S.loc >= OTK_LV ? Math.min(3, tm('otk')) : 0; pool(P_.otk, no, ['f1', 'f3']);
   P_.otk.forEach((p, i) => { p.x = L.otk + .3 + i * .3; p.z = L.z0 - .15; p.o.rotation.y = 0; p.box.visible = false; p.play(S.q.otk >= 1 ? 'interact-right' : 'idle'); });
   const nq = S.loc >= POST_LV ? Math.min(3, tm('post')) : 0; pool(P_.post, nq, ['m2', 'f3']);
