@@ -816,7 +816,7 @@ const A={
     modal('🤝 '+c.n+' — постоянный клиент','Награда: <b>'+fm(c.r[0])+'</b>, 💎 '+c.r[2]+' и <b>+'+Math.round(c.r[1]*100)+'% к цене всех изделий навсегда</b>.'+(clDone(S.loc)===2&&LOC[S.loc+1]?'<br><br>Можно переезжать — вкладка «Рост».':''))},
   offer:i=>{const o=S.offer;S.offer=null;if(!o||+i!==1)return;if(o.kind==='order')S.order={n:o.n,need:o.need,got:0,left:120,bonus:o.bonus};
     else if(S.money>=o.c){spend(o.c,'p');S.pl+=1e4;toast('🧵 +10 кг пластика')}else toast('Не хватает денег')},
-  bclaim:i=>{const b=S.board[+i];if(!b||b.got<b.need)return;VIS.client=(VIS.client||0)+1;if(S.loc>=MP_LV)S.star=Math.min(5,(S.star||4.5)+.05);earn(b.bonus,1);S.gems+=b.gem;S.board.splice(+i,1);fillBoard();sound('coin');toast('📋 Заказ «'+b.n+'» сдан: +'+fm(b.bonus)+(b.gem?' и 💎 1':''))},
+  bclaim:i=>{const b=S.board[+i];if(!b||b.got<b.need)return;VIS.client=(VIS.client||0)+1;if(S.loc>=MP_LV)S.star=Math.min(5,(S.star||4.5)+.05);earn(b.bonus,1);S.gems+=b.gem;S.cbd=(S.cbd||0)+1;S.board.splice(+i,1);fillBoard();sound('coin');toast('📋 Заказ «'+b.n+'» сдан: +'+fm(b.bonus)+(b.gem?' и 💎 1':''))},
   bprod:i=>{const b=S.board[+i];if(b&&S.unl[b.p]){S.prod=b.p;toast('🖨 Печатаем «'+PR[b.p].n+'»')}},
   imp:()=>{const n=impN(),c=impC();if(n<4&&S.money>=c){spend(c);S.imp++;sound('coin');toast('🔨 '+IMP[S.loc][n]+': +'+Math.round(IMP_B*100)+'% к цене навсегда')}},
   ns:()=>{S.ns=S.ns?0:1;toast(S.ns?'🌙 Ночная смена включена: ночью все работают, ночные часы ×2 к зарплате':'🌙 Ночная смена выключена: ночью люди дома')},
