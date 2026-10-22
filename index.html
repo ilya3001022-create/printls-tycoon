@@ -268,7 +268,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.20.1'; // номер версии подставляет release.sh
+const APPV='0.20.2'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=18; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -342,6 +342,7 @@ const rcost=()=>BAL.rack*Math.pow(BAL.rackF,S.racks); // стеллаж на 6 �
 const upcost=u=>u.c*Math.pow(u.f,S.up[u.k]||0);
 const prodRate=()=>S.pr.reduce((a,x)=>a+spOf(x)/PX(x).t,0)*spd(); // шт/с (у стеллажей могут быть разные изделия)
 const plPrice=()=>P().kg*BAL.bulk[S.loc];
+const PL_K={1:1,10:8.7,100:80,1000:750}; // пачки пластика: кг → множитель цены 1 кг (оптом дешевле)
 const clDone=l=>(S.cl[l]||[]).filter(c=>c&&c.done).length;
 const impN=()=>S.imp-S.impB; // шагов обустройства на этой площадке
 const impC=()=>(LOC[S.loc+1]?LOC[S.loc+1].c:LOC[5].c*20)*IMP_K[impN()];
@@ -790,7 +791,8 @@ function view(){
    ${opn('boost')?'<button class="btn sec" style="width:100%;margin-top:8px" data-a="boost" data-u="boost"></button>':''}
    <div class="row" style="margin-top:8px"><div class="grow"><b data-u="pl"></b><div class="sub" data-u="plt"></div></div>
    <button class="btn sec" data-a="spool" data-i="1" data-c="${plPrice()}">1 кг · ${fm(plPrice())}</button>
-   <button class="btn sec" data-a="spool" data-i="10" data-c="${plPrice()*8.7}">10 кг · ${fm(plPrice()*8.7)}</button></div></div>
+   <button class="btn sec" data-a="spool" data-i="10" data-c="${plPrice()*8.7}">10 кг · ${fm(plPrice()*8.7)}</button></div>
+   ${S.loc>=1?`<div class="row" style="margin-top:6px;justify-content:flex-end">${[100,1000].filter(k=>k<1000||S.loc>=3).map(k=>`<button class="btn sec" data-a="spool" data-i="${k}" data-c="${plPrice()*PL_K[k]}">${k<1000?k+' кг':'1 т'} · ${fm(plPrice()*PL_K[k])}</button>`).join('')}</div>`:''}</div>
    ${S.loc>=MP_LV?'<div class="card row"><div class="grow"><b>'+(icn('star',1)||'⭐ ')+'Рейтинг магазина <span data-u="star"></span></b><div class="sub">Маркетплейс: рейтинг тянется к уровню брака (калибровка поднимает), сорванный заказ −0,15. От рейтинга зависит спрос.</div></div></div>':''}
    ${opn('dq')?'<h3>📅 Задания дня</h3><div class="card" data-u="dq"></div>':''}
    ${opn('games')?`<h3>🎮 Мини-игры <span class="sub">— 20 секунд, за бонус</span></h3><div class="card"><div class="row" style="flex-wrap:wrap;gap:6px">
@@ -874,7 +876,7 @@ const A={
     else if(x.st==='fail')fixPrinter(x,i,false);
     else if(x.st==='run'){x.p+=.08;if(x.p>=1){x.p=1;x.st='done'}}else if(x.st==='nopl')toast('🧵 Нет пластика — купи катушку')},
   clrall:()=>{for(const x of S.pr)if(x.st==='done'&&!clear(x)){A.p(S.pr.indexOf(x));break}},
-  spool:i=>{const c=+i===10?plPrice()*8.7:plPrice();if(S.money>=c){spend(c,'p');S.pl+=i*1000}},
+  spool:i=>{const k=+i,c=plPrice()*(PL_K[k]||1);if(!PL_K[k])return;if(S.money>=c){spend(c,'p');S.pl+=k*1000}},
   st:i=>{const k=ST[i].k;if(!stages().includes(k)){toast(k==='post'?'🎨 Постобработка откроется в «'+LOC[POST_LV].n+'»':'🔍 ОТК откроется в «'+LOC[OTK_LV].n+'»');return}
     if(k==='ship'){if(!tapVan()&&performance.now()-fullT>2000){fullT=performance.now();toast(S.ag.ship.some(v=>v.st==='dock')?'🚚 Грузить нечего — сначала упакуй':'🚚 Фургон в рейсе — вернётся через '+Math.ceil(Math.min(...S.ag.ship.map(v=>v.t)))+' с')}return}proc(k,BAL.manual)},
   qx:k=>{const c=qcost(k);if(S.money>=c){spend(c);S.qc[k]++;toast('📐 Стол «'+ROLE[k].n+'»: теперь '+qcap(k)+' мест')}},
