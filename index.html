@@ -223,7 +223,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.18.6'; // номер версии подставляет release.sh
+const APPV='0.18.7'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=17; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -1240,7 +1240,7 @@ function build() {
   // свет и тени под размер мира
   sun.position.set(L.W + 4, 9, L.H * .4 + 4); sun.target.position.set(L.W / 2, 0, L.H / 2);
   const sc = sun.shadow.camera, m = Math.max(L.W, L.H); sc.left = -m; sc.right = m; sc.top = m; sc.bottom = -m; sc.far = 40; sc.updateProjectionMatrix(); sun.shadow.needsUpdate = true;
-  if (!view.init || view.key !== S.loc + ':' + L.VR) { view.key = S.loc + ':' + L.VR; view.init = true; if (L.VR > 6) { view.t.set(L.W * .4, 0, L.z0 - .6); view.zoom = 1.9; } else { view.t.set(L.W * (L.VR <= 3 ? .45 : .42), 0, L.H * (L.VR <= 3 ? .4 : .46)); view.zoom = L.VR <= 3 ? .92 : .95; } }
+  if (!view.init || view.key !== S.loc + ':' + L.VR) { view.key = S.loc + ':' + L.VR; view.init = true; if (L.VR > 6) { view.t.set(L.W * (S.loc >= POST_LV ? .24 : .4), 0, L.z0 - (S.loc >= POST_LV ? 0 : .6)); view.zoom = S.loc >= POST_LV ? 1.3 : 1.9; } else { view.t.set(L.W * (L.VR <= 3 ? .45 : .42), 0, L.H * (L.VR <= 3 ? .4 : .46)); view.zoom = L.VR <= 3 ? .92 : .95; } } // с мастерской в кадре и стол постобработки у левой стены
 }
 function mkCat() {
   const g = new THREE.Group(), fur = M('#e8873a'), add = (geo, x, y, z) => { const o = new THREE.Mesh(geo, fur); o.position.set(x, y, z); o.castShadow = false; g.add(o); return o; };
@@ -1366,7 +1366,7 @@ function frame() {
   const no = S.loc >= OTK_LV ? Math.min(3, tm('otk')) : 0; pool(P_.otk, no, ['f1', 'f3']);
   P_.otk.forEach((p, i) => { p.x = L.otk + .3 + i * .3; p.z = L.z0 - .15; p.o.rotation.y = 0; p.box.visible = false; p.play(S.q.otk >= 1 ? 'interact-right' : 'idle'); });
   const nq = S.loc >= POST_LV ? Math.min(3, tm('post')) : 0; pool(P_.post, nq, ['m2', 'f3']);
-  P_.post.forEach((p, i) => { p.x = L.otk + .3 + i * .3; p.z = L.post - .15; p.o.rotation.y = 0; p.box.visible = false; p.play(S.q.post >= 1 ? 'interact-right' : 'idle'); }); // обработчики — у стола, как контролёры ОТК
+  P_.post.forEach((p, i) => { p.x = L.otk + 1.32; p.z = L.post + .12 + i * .22; p.o.rotation.y = -Math.PI / 2; p.box.visible = false; p.play(S.q.post >= 1 ? 'interact-right' : 'idle'); }); // обработчики — с правого торца стола: операторы кладут детали с северного края
   P_.cr.o.visible = !!tm('ship') && f0 && f0.st === 'dock'; P_.cr.x = L.dock - .3; P_.cr.z = L.z0 + 2.2; P_.cr.o.rotation.y = Math.PI * .75; P_.cr.box.visible = false; P_.cr.play(f0 && f0.c ? 'interact-right' : 'idle');
   if (!working()) for (const p of [...P_.op, ...P_.pack, ...P_.otk, ...P_.post, P_.cr]) p.o.visible = false; // ночью без смены — по домам
   for (const p of [...P_.op, ...P_.pack, ...P_.otk, ...P_.post, P_.cr]) { p.o.position.set(p.x, 0, p.z); p.mix.update(dt); }
