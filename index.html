@@ -228,7 +228,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.19.2'; // номер версии подставляет release.sh
+const APPV='0.19.3'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=17; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -383,9 +383,9 @@ function stepOp(a,dt){const f=stages()[0],tb=lay().drop[f],v=vOf('op');
         if(bi<0)break;pick.push(bi);cur=front(bi)}
       if(!pick.length)return;a.tg=pick;a.path=route([a.x,a.z],front(pick[0]));a.st='go'}
     if(a.path.length){const r=walkTo(a,dt,v);if(r<0)return;dt=r}
-    if(a.st==='go'){const i=a.tg.shift(),x=S.pr[i];if(x&&x.st==='done'){const pi=x.pi!=null?x.pi:S.prod;a.b=a.b||{};bAdd(a.b,pi,1);a.c++;S.made++;litter();S.mp[pi]=(S.mp[pi]||0)+1;restart(x,i);a.w=BAL.load}
+    if(a.st==='go'){const i=a.tg.shift(),x=S.pr[i];if(x&&x.st==='done'){const pi=x.pi!=null?x.pi:S.prod;a.b=a.b||{};bAdd(a.b,pi,1);a.c++;S.made++;litter();S.mp[pi]=(S.mp[pi]||0)+1;restart(x,i);a.w=a.wT=BAL.load}
       if(a.tg.length)a.path=route([a.x,a.z],front(a.tg[0]));else if(a.c){a.path=route([a.x,a.z],tb);a.st='back'}else a.st='idle';continue}
-    if(a.st==='back'||a.st==='wait'){const n=Math.min(a.c,Math.floor(qcap(f)-S.q[f]+1e-6));if(n>0){qPut(f,bTake(a.b,n));a.c-=n;a.w=BAL.load*n}
+    if(a.st==='back'||a.st==='wait'){const n=Math.min(a.c,Math.floor(qcap(f)-S.q[f]+1e-6));if(n>0){qPut(f,bTake(a.b,n));a.c-=n;a.w=a.wT=BAL.load*n}
       if(a.c){a.st='wait';return} // стол забит — стоит с грузом и ждёт: узкое место видно глазами
       a.st='idle'}}}
 // упаковщик: пакует у стола до полной тележки, несёт коробки к фургону
@@ -397,7 +397,7 @@ function stepPack(a,dt){const L=lay(),v=vOf('pack'),c=capOf('pack');
       if(a.c&&a.c<c&&(a.iw||0)<2){const u=Math.min(dt,2-(a.iw||0));a.iw=(a.iw||0)+u;dt-=u;continue} // ждёт до 2 с, вдруг поднесут ещё
       if(a.c){a.iw=0;a.path=[L.sDock];a.st='go';continue}return}
     if(a.path.length){const r=walkTo(a,dt,v);if(r<0)return;dt=r}
-    if(a.st==='go'||a.st==='wait'){const n=Math.min(a.c,Math.floor(qcap('ship')-S.q.ship+1e-6));if(n>0){qPut('ship',bTake(a.b,n));a.c-=n;a.w=BAL.load*n}
+    if(a.st==='go'||a.st==='wait'){const n=Math.min(a.c,Math.floor(qcap('ship')-S.q.ship+1e-6));if(n>0){qPut('ship',bTake(a.b,n));a.c-=n;a.w=a.wT=BAL.load*n}
       if(a.c){a.st='wait';return}a.path=[L.sPack];a.st='ret';continue}
     if(a.st==='ret')a.st='pack'}}
 // фургон: грузит со склада у ворот, уезжает полным (или если ждать больше нечего); груз едет в кузове (f.c),
@@ -1096,10 +1096,10 @@ function fit(k, size) { const o = prop(k, 1), sz = new THREE.Box3().setFromObjec
 function person(k) {
   const o = SkeletonUtils.clone(LIB[k].scene), mix = new THREE.AnimationMixer(o), act = {};
   for (const c of LIB[k].animations) act[c.name] = mix.clipAction(c);
-  const p = {o, mix, act, cur: null, x: 0, z: 0, path: [], carry: false, wait: 0};
+  const p = {o, mix, act, cur: null, x: 0, z: 0, path: [], carry: false, wait: 0, ring: null};
   p.play = n => { if (p.cur === n || !act[n]) return; const a = act[n].reset().fadeIn(.2).play(); if (p.cur) act[p.cur].fadeOut(.2); p.cur = n; };
   const hh = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y; // рост модели: у мини-человечков полроста — голова
-  const bx = prop('box', .75); bx.position.set(0, hh * .2, .15); bx.visible = false; o.add(bx); p.box = bx;
+  p.hh = hh; const bx = prop('box', .75); bx.position.set(0, hh * .2, .15); bx.visible = false; o.add(bx); p.box = bx;
   o.traverse(m => { if (m.isMesh) m.castShadow = false; });
   p.play('idle'); world.add(o); return p;
 }
@@ -1346,6 +1346,29 @@ function show(p, a, dt, i = 0) {
   p.play(moving ? 'walk' : a.c ? 'holding-both' : a.st === 'pack' && S.q.pack >= 1 ? 'interact-right' : 'idle');
 }
 
+
+// ---------- кружок действия над головой: общие геометрии/материалы, на человека — только меш и спрайт ----------
+const RING_N = 24, RING_COL = {otk: '#4aa3ff', pack: '#ff8a1f', post: '#ff8a1f', op: '#4cd964', ship: '#4cd964', fix: '#ff4d4d', clean: '#9a9a9a'};
+const ringBack = new THREE.RingGeometry(.085, .14, 24), ringArc = [], ringMat = {};
+for (let i = 1; i <= RING_N; i++) ringArc.push(new THREE.RingGeometry(.085, .14, 24, 1, Math.PI / 2, -i / RING_N * Math.PI * 2));
+const ringBackMat = new THREE.MeshBasicMaterial({color: '#000', transparent: true, opacity: .55, depthTest: false, toneMapped: false, side: THREE.DoubleSide});
+for (const k in RING_COL) ringMat[k] = new THREE.MeshBasicMaterial({color: RING_COL[k], transparent: true, depthWrite: false, depthTest: false, toneMapped: false, side: THREE.DoubleSide});
+const idleMat = ['Zz'].map(ch => new THREE.SpriteMaterial({depthTest: false, toneMapped: false, map: canvasTex(64, 64, g => {
+  g.fillStyle = 'rgba(0,0,0,.65)'; g.beginPath(); g.arc(32, 32, 30, 0, 7); g.fill(); g.fillStyle = '#ffc53d'; g.font = 'bold ' + 30 + 'px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, 32, 34); })}));
+// kind — ключ цвета; pr — прогресс 0..1, null — кольца нет; idle — вместо кольца значок «Zz»
+function actRing(p, kind, pr, idle) {
+  if (!p.ring) {
+    const g = new THREE.Group(), back = new THREE.Mesh(ringBack, ringBackMat), arc = new THREE.Mesh(ringArc[0], ringMat.op), ic = new THREE.Sprite(idleMat[0]);
+    back.renderOrder = 11; arc.renderOrder = 12; ic.renderOrder = 12; ic.scale.set(.3, .3, 1); g.add(back, arc, ic); g.scale.setScalar(LS); world.add(g); p.ring = {g, back, arc, ic};
+  }
+  const r = p.ring, show = p.o.visible && (idle || pr != null);
+  r.g.visible = show; if (!show) return;
+  r.g.position.set(p.x, (p.hh || 1) + .2 * LS, p.z); r.g.quaternion.copy(cam.quaternion);
+  r.ic.visible = !!idle; r.back.visible = r.arc.visible = !idle;
+  if (idle) { r.ic.material = idleMat[0]; return; }
+  r.arc.geometry = ringArc[Math.max(0, Math.min(RING_N, Math.ceil(pr * RING_N))) - 1] || ringArc[0]; r.arc.visible = pr > .01; r.arc.material = ringMat[kind];
+}
+
 // ---------- кадр ----------
 const clock = new THREE.Clock(); let T = 0, lt = 0, ready = false; const fps = {n: 0, t: 0, warned: 0, bad: 0, from: 0};
 function frame() {
@@ -1397,6 +1420,13 @@ function frame() {
   P_.post.forEach((p, i) => { p.x = L.otk + 1.32; p.z = L.post + .12 + i * .22; p.o.rotation.y = -Math.PI / 2; p.box.visible = false; p.play(S.q.post >= 1 ? 'interact-right' : 'idle'); }); // обработчики — с правого торца стола: операторы кладут детали с северного края
   P_.cr.o.visible = !!tm('ship') && f0 && f0.st === 'dock'; P_.cr.x = L.dock - .3; P_.cr.z = L.z0 + 2.2; P_.cr.o.rotation.y = Math.PI * .75; P_.cr.box.visible = false; P_.cr.play(f0 && f0.c ? 'interact-right' : 'idle');
   if (!working()) for (const p of [...P_.op, ...P_.pack, ...P_.otk, ...P_.post, P_.cr]) p.o.visible = false; // ночью без смены — по домам
+  const wr = a => a.w > 0 && a.wT > 0 ? 1 - a.w / a.wT : null;
+  S.ag.op.forEach((a, i) => actRing(P_.op[i], 'op', wr(a), a.st === 'wait' && !(a.w > 0)));
+  P_.op.slice(S.ag.op.length).forEach(p => actRing(p, 'op', null)); P_.pack.slice(S.ag.pack.length).forEach(p => actRing(p, 'pack', null));
+  S.ag.pack.forEach((a, i) => actRing(P_.pack[i], 'pack', a.w > 0 ? wr(a) : a.st === 'pack' && a.c < capOf('pack') && S.q.pack >= 1 && a.t > 0 ? a.t / BAL.packT : null, a.st === 'wait' && !(a.w > 0)));
+  P_.otk.forEach(p => actRing(p, 'otk', S.q.otk >= 1 ? S.team.otk.a % 1 : null));
+  P_.post.forEach(p => actRing(p, 'post', S.q.post >= 1 ? S.team.post.a % 1 : null));
+  actRing(P_.cr, 'ship', f0 && f0.st === 'dock' && S.q.ship >= 1 && f0.t > 0 ? Math.min(1, f0.t / BAL.load) : null);
   for (const p of [...P_.op, ...P_.pack, ...P_.otk, ...P_.post, P_.cr]) { p.o.position.set(p.x, 0, p.z); p.mix.update(dt); }
   // сервер и дрон
   server.visible = !!S.mg.srv; server.leds.forEach((l, i) => l.material.color.set(Math.sin(T * 6 + i * 1.7) > 0 ? '#2ecc71' : '#0a3d1f'));
