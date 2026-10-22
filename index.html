@@ -223,6 +223,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
+const APPV='0.18.6'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=17; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -301,7 +302,7 @@ const impN=()=>S.imp-S.impB; // шагов обустройства на это�
 const impC=()=>(LOC[S.loc+1]?LOC[S.loc+1].c:LOC[5].c*20)*IMP_K[impN()];
 // спрос, ₽/с: база площадки × маркетинг × постоянные клиенты × реклама; копится до 2 мин вперёд
 const MP_LV=2; // маркетплейсы — с мини-офиса
-const starT=()=>Math.max(1,Math.min(5,5.2-30*defect())); // к какому рейтингу тянется магазин: брак 10% → ★2,2, 2% → ★4,6
+const starT=()=>Math.max(1,Math.min(5,5.6-30*defect())); // к какому рейтингу тянется магазин: брак 10% → ★2,6, 2% (всё прокачано) → ★5
 const starM=()=>S.loc>=MP_LV?.5+.12*(S.star||4.5):1;    // спрос от рейтинга: ★5 → ×1,1, ★2 → ×0,74
 const demand=()=>BAL.dem[S.loc]*(1+BAL.mkt*(S.up.mkt||0))*(1+S.cb)*starM()*(S.boostT>0?2:1);
 const prestGain=()=>S.loc<5?0:Math.floor(Math.sqrt(S.run/1e8));
@@ -772,7 +773,7 @@ function view(){
    if(S.loc>=5)h+=`<h3 style="margin-top:14px">Продать бизнес</h3><div class="card"><div class="sub">Всё обнулится, а репутация ⭐ останется: каждая звезда +10% к доходу навсегда. Сейчас ⭐ ${S.rep}.</div>
     <div class="row" style="margin-top:8px"><div class="grow sub">${prestGain()?'Получишь ⭐ '+prestGain():'Нужно заработать за круг 1 млрд ₽'}</div><button class="btn" data-a="prest" ${prestGain()?'':'disabled'}>Продать</button></div></div>`;
    h+=`<div class="sub" style="text-align:center;margin:4px 0 10px">Printls Tycoon · от команды Printls3D</div><div class="card sub">Заработано за всё время: ${fm(S.all)} · сделано деталей: ${fn(S.made)} · в игре ${dur((Date.now()-S.t0)/1000)}<div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn sec" data-a="snd">${S.snd?'🔊 Звук вкл':'🔇 Звук выкл'}</button><button class="btn sec" data-a="mus">${S.mus?'🎵 Музыка вкл':'🎵 Музыка выкл'}</button><button class="btn sec" data-a="eco">${S.eco?'🪫 Графика: экономная':'✨ Графика: полная'}</button><button class="btn sec" data-a="exp">📋 Код сохранения</button><button class="btn sec" data-a="imp2">📥 Загрузить код</button><button class="btn sec" data-a="reset">Начать с нуля</button></div><div class="sub" style="margin-top:6px">${TG?"☁️ Прогресс сохраняется в облаке Telegram — откроешь бота с любого устройства, он на месте.":"⚠️ Игра открыта не через бота: прогресс хранится только в этом браузере. Надёжнее открывать кнопкой «Играть» в боте — там облако Telegram. Или сохрани код."}</div></div>`;
-   return h}
+   return h+'<div class="sub" style="text-align:center;margin:8px 0">Printls Tycoon v'+APPV+'</div>'}
 }
 function render(){
   $('v').innerHTML=view();$('scene').style.display=tab==='farm'?'block':'none';
