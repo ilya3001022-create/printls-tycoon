@@ -175,6 +175,7 @@ const UP=[
  {k:'maint',n:'Плановое ТО',d:'смазка, чистка, подтяжка ремней по графику: на 30% меньше аварий на всех принтерах',c:20000,f:1,max:1,lv:1},
  {k:'hard',n:'Закалённые сопла на всех',d:'засоры на карбоне −70%',c:30000,f:1,max:1,lv:2},
  {k:'farmsw',n:'ПО фермы',d:'единая очередь на весь парк: оператор уносит +50% деталей за рейс (как SimplyPrint, Bambu Farm Manager)',c:500000,f:2.4,max:3,lv:3},
+ {k:'van',n:'Фургон побольше',d:'+4 места в каждом фургоне: удлинённый кузов, стеллажи в кузове, потом газель побольше',c:6000,f:1.7,max:15,lv:0},
  {k:'mkt',n:'Маркетинг',d:'+15% к спросу: карточки, реклама, блогеры',c:5000,f:1.45,max:999,lv:0}];
 const tm=k=>S.team[k].n;
 const CL=[ // крупные клиенты: 3 задачи → постоянная прибавка к цене. r: деньги, прибавка, 💎
@@ -277,7 +278,7 @@ const front=i=>{const L=lay();let FR=FRM.get(layK);if(!FR)FRM.set(layK,FR=[]);if
 const route=(a,b)=>Math.abs(a[1]-b[1])<.05?[b]:[[.22,a[1]],[.22,b[1]],b];
 const plen=(a,pts)=>{let d=0,c=a;for(const q of pts){d+=Math.abs(q[0]-c[0])+Math.abs(q[1]-c[1]);c=q}return d};
 const vOf=k=>BAL.walk[k]*Math.pow(BAL.walkLv,S.team[k].lv)*(1+.25*(S.up.conv||0))*(S.broke?.5:1);
-const capOf=k=>Math.round((BAL.cap[k]+BAL.capLv[k]*S.team[k].lv)*(k==='op'?1+.5*(S.up.farmsw||0):1));
+const capOf=k=>Math.round((BAL.cap[k]+BAL.capLv[k]*S.team[k].lv+(k==='ship'?4*(S.up.van||0):0))*(k==='op'?1+.5*(S.up.farmsw||0):1));
 const road=()=>BAL.road[S.loc]*(night()?BAL.roadNight:1)/(1+.1*(S.up.conv||0));
 const OPT=new Map(); // средний рейс оператора туда-обратно — для офлайна и подсказок; кэш по раскладке
 function opTrip(){const L=lay(),k=layK+':'+stages()[0]+':'+Math.min(L.VR*6,S.pr.length);if(OPT.has(k))return OPT.get(k);let opD;const t=L.drop[stages()[0]];let d=0;const n=Math.min(L.VR*6,Math.max(1,S.pr.length));
