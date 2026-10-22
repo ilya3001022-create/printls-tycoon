@@ -228,7 +228,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.19'; // номер версии подставляет release.sh
+const APPV='0.19.1'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=17; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -937,7 +937,7 @@ function dbgShow(){const d=$('dbg');if(!d)return;const o=dbgData();d.textContent
   d.onclick=()=>{try{navigator.clipboard.writeText(JSON.stringify(o))}catch(e){}toast('📋 Отчёт скопирован — перешли его в чат')}}
 setInterval(save,5000);
 // статистика игроков: свой сервер (Cloudflare Worker, папка stats-worker). Пустой адрес — ничего не шлём; тесты (#test) не считаем
-const STAT_URL='';
+const STAT_URL='https://printls-stats.printls-stats.workers.dev';
 function statPing(){if(!STAT_URL||/test/.test(location.hash)||document.hidden)return;let id,name='';const u=TG&&TG.initDataUnsafe&&TG.initDataUnsafe.user;
   if(u){id='tg:'+u.id;name=u.username?'@'+u.username:[u.first_name,u.last_name].filter(Boolean).join(' ')}
   else{try{id=localStorage.getItem('printls_sid');if(!id){id='br:'+Math.random().toString(36).slice(2,12);localStorage.setItem('printls_sid',id)}}catch(e){return}}
