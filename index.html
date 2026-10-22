@@ -223,7 +223,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.18.7'; // номер версии подставляет release.sh
+const APPV='0.18.8'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=17; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -556,16 +556,27 @@ function goBack(){const g=document.getElementById('mg');if(g){clearInterval(g._t
   if($('mod').innerHTML){$('mod').innerHTML='';if(MQ.length)modal(...MQ.shift());return}if(tab!=='farm'){tab='farm';render()}}
 function backBtn(){if(!TG||!TG.BackButton)return;const need=!!document.getElementById('mg')||!!$('mod').innerHTML||tab!=='farm';
   if(need!==backBtn.v){backBtn.v=need;try{need?TG.BackButton.show():TG.BackButton.hide()}catch(e){}}}
-// облако: куски по 4000 символов + заголовок «кусков|длина|хеш»; заголовок пишем последним, читаем — сверяем
+// облако: две ячейки по очереди (a/b), в каждой куски по 4000 символов + заголовок «кусков|длина|хеш|время».
+// Заголовок пишем только после подтверждённой записи всех кусков: закрыли игру посреди записи — цела другая ячейка.
+// При загрузке берём самую свежую целую копию. Пока облако не прочитано, в него не пишем — свежая игра не затрёт прогресс.
 const hsh=t=>{let h=5381;for(let i=0;i<t.length;i++)h=(h*33+t.charCodeAt(i))|0;return h>>>0};
-function cloudSave(j,now){if(!TG||!TG.CloudStorage||!now&&Date.now()-cloudT<15000)return;cloudT=Date.now();const n=Math.ceil(j.length/4000);
-  try{for(let i=0;i<n;i++)TG.CloudStorage.setItem('cs_'+i,j.slice(i*4000,(i+1)*4000));TG.CloudStorage.setItem('csh',n+'|'+j.length+'|'+hsh(j))}catch(e){}}
-function cloudLoad(pre){if(!TG||!TG.CloudStorage)return;const keys=pre?[pre+'h',i=>pre+'_'+i]:['csh',i=>'cs_'+i];
-  try{TG.CloudStorage.getItem(keys[0],(e,h)=>{if(e||!h){const old=['c12','c11','c10','c9','c8'],k=old.indexOf(pre);if(k<old.length-1)cloudLoad(old[k+1]);return} // нет — ищем копию прошлых версий
-  const [n,len,hs]=h.split('|').map(Number);if(!n)return;
-  const ks=[...Array(n)].map((_,i)=>keys[1](i));
-  TG.CloudStorage.getItems(ks,(e2,v)=>{if(e2||!v)return;const t=ks.map(k=>v[k]||'').join('');if(t.length!==len||hsh(t)!==hs)return; // кусок не дописался — не трогаем
-    try{const j=JSON.parse(t);if(j&&j.pr&&(!hadLocal||j.last>S.last)){S=upgrade(j);hadLocal=true;render();offline()}}catch(x){window.__cloudErr=String(x)}})})}catch(e){}}
+let cloudReady=false,cloudBusy=0,cloudSlot=0;
+function cloudSave(j,now){if(!TG||!TG.CloudStorage||!cloudReady||cloudBusy&&Date.now()-cloudBusy<20000||!now&&Date.now()-cloudT<15000)return;cloudT=cloudBusy=Date.now();
+  const sl='ab'[cloudSlot],n=Math.ceil(j.length/4000),hd=n+'|'+j.length+'|'+hsh(j)+'|'+(S.last||Date.now());let left=n,bad=0;
+  const done=e=>{if(e)bad=1;if(--left>0)return;if(bad){cloudBusy=0;return}
+    TG.CloudStorage.setItem(sl+'h',hd,e2=>{cloudBusy=0;if(!e2)cloudSlot^=1})}; // ячейка записана — следующая запись в другую
+  try{for(let i=0;i<n;i++)TG.CloudStorage.setItem(sl+'_'+i,j.slice(i*4000,(i+1)*4000),done)}catch(e){cloudBusy=0}}
+// прочитать одну копию: заголовок → куски → сверка длины и хеша; cb(объект или null)
+function cloudRead(h,key,cb){const [n,len,hs]=String(h||'').split('|').map(Number);if(!n){cb(null);return}const ks=[...Array(n)].map((_,i)=>key(i));
+  try{TG.CloudStorage.getItems(ks,(e,v)=>{if(e||!v){cb(null);return}const t=ks.map(k=>v[k]||'').join('');if(t.length!==len||hsh(t)!==hs){cb(null);return}
+    try{const o=JSON.parse(t);cb(o&&o.pr?o:null)}catch(x){cb(null)}})}catch(e){cb(null)}}
+function cloudLoad(){if(!TG||!TG.CloudStorage){cloudReady=true;return}
+  const fin=o=>{if(o&&(!hadLocal||o.last>S.last)){S=upgrade(o);hadLocal=true;render();offline()}cloudReady=true;save()};
+  try{TG.CloudStorage.getItems(['ah','bh','csh'],(e,hv)=>{if(e||!hv){cloudReady=!hadLocal?false:true;if(!hadLocal)setTimeout(cloudLoad,5000);return} // облако не ответило: без своей копии ждём и пробуем снова, не пишем
+    const c=[['a',hv.ah],['b',hv.bh]].filter(x=>x[1]).sort((x,y)=>(+String(y[1]).split('|')[3]||0)-(+String(x[1]).split('|')[3]||0));
+    const next=k=>{if(k<c.length){cloudRead(c[k][1],i=>c[k][0]+'_'+i,o=>{if(o){cloudSlot=c[k][0]==='a'?1:0;fin(o)}else next(k+1)});return}
+      if(hv.csh)cloudRead(hv.csh,i=>'cs_'+i,fin);else fin(null)}; // старый формат (до 0.18.8) — одна ячейка cs_
+    next(0)})}catch(x){cloudReady=true}}
 const haptic=t=>{try{TG&&TG.HapticFeedback.impactOccurred(t||'light')}catch(e){}};
 
 // ---------- звук и мелочи ----------
@@ -915,6 +926,13 @@ function dbgData(){const a=[...PERF.ft].sort((x,y)=>x-y),q=p=>a.length?a[Math.mi
 function dbgShow(){const d=$('dbg');if(!d)return;const o=dbgData();d.textContent=Object.entries(o).map(([k,v])=>k+': '+v).join('\n')+'\n[тап — скопировать]';
   d.onclick=()=>{try{navigator.clipboard.writeText(JSON.stringify(o))}catch(e){}toast('📋 Отчёт скопирован — перешли его в чат')}}
 setInterval(save,5000);
+// статистика игроков: свой сервер (Cloudflare Worker, папка stats-worker). Пустой адрес — ничего не шлём; тесты (#test) не считаем
+const STAT_URL='';
+function statPing(){if(!STAT_URL||/test/.test(location.hash)||document.hidden)return;let id,name='';const u=TG&&TG.initDataUnsafe&&TG.initDataUnsafe.user;
+  if(u){id='tg:'+u.id;name=u.username?'@'+u.username:[u.first_name,u.last_name].filter(Boolean).join(' ')}
+  else{try{id=localStorage.getItem('printls_sid');if(!id){id='br:'+Math.random().toString(36).slice(2,12);localStorage.setItem('printls_sid',id)}}catch(e){return}}
+  try{fetch(STAT_URL+'/ping',{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({id,name,tg:!!u,loc:S.loc,money:Math.floor(S.money),pr:S.pr.length,made:S.made,v:APPV}),keepalive:true}).catch(()=>{})}catch(e){}}
+setTimeout(statPing,8000);setInterval(statPing,120000); // вход и раз в 2 минуты, пока игра на экране
 
 </script>
 <script>// модели: Kenney (www.kenney.nl), лицензия CC0
