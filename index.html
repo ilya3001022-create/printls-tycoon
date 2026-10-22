@@ -268,7 +268,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.20'; // номер версии подставляет release.sh
+const APPV='0.20.1'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=18; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -979,7 +979,9 @@ if(!S.intro){S.intro=true;modal('🖨 Printls Tycoon','<span class="sub">от к
 const STEP=.1;let lacc=0,lastF=performance.now(),updT=0;window.ALPHA=0;
 const PERF={ft:[],tk:[0,0,0],upd:0}; // для оверлея отладки
 function loop(now){requestAnimationFrame(loop);frameStep(now)}
-function frameStep(now){let fd=(now-lastF)/1000;lastF=now;
+const FR_T=new Float64Array(720),FR_D=new Float32Array(720);let frI=0,frN=0; // кольцо кадров для телеметрии: метка времени и длительность
+function fpsStat(now){let n=0,sum=0,mx=0;for(let i=0;i<frN;i++){if(now-FR_T[i]>10000)continue;n++;sum+=FR_D[i];if(FR_D[i]>mx)mx=FR_D[i]}return n>5&&sum>0?{avg:Math.round(n/sum),min:Math.round(1/mx)}:{avg:0,min:0}}
+function frameStep(now){let fd=(now-lastF)/1000;lastF=now;if(fd>0&&fd<1){FR_T[frI]=now;FR_D[frI]=fd;frI=(frI+1)%720;if(frN<720)frN++}
   if(fd>10){S.last=Date.now()-fd*1000;offline();lacc=0}     // вернулись из фона
   else{lacc+=fd;let n=0;while(lacc>=STEP&&n<120){snap();tick(STEP);lacc-=STEP;n++}if(lacc>STEP)lacc=0;PERF.tk[Math.min(2,n)]++}
   window.ALPHA=Math.min(1,lacc/STEP);PERF.ft.push(fd*1000);if(PERF.ft.length>300)PERF.ft.shift();
@@ -1000,10 +1002,17 @@ function dbgShow(){const d=$('dbg');if(!d)return;const o=dbgData();d.textContent
 setInterval(save,5000);
 // статистика игроков: свой сервер (Cloudflare Worker, папка stats-worker). Пустой адрес — ничего не шлём; тесты (#test) не считаем
 const STAT_URL='https://printls-stats.printls-stats.workers.dev';
+const SESS0=Date.now();
+function statId(){const u=TG&&TG.initDataUnsafe&&TG.initDataUnsafe.user;if(u)return 'tg:'+u.id;try{return localStorage.getItem('printls_sid')}catch(e){return null}}
+let errT=0;
+function errSend(msg,src){try{const now=Date.now();if(!STAT_URL||/test/.test(location.hash)||now-errT<60000)return;errT=now;const id=statId();if(!id)return;
+  fetch(STAT_URL+'/err',{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({id,v:APPV,msg:String(msg).slice(0,200),src:String(src||'')}),keepalive:true}).catch(()=>{})}catch(e){}}
+window.addEventListener('error',e=>/^Script error/i.test(String(e.message))||errSend(e.message||'error',(e.filename||'').split('/').pop()+':'+(e.lineno||0)));
+window.addEventListener('unhandledrejection',e=>{const r=e.reason;errSend(r&&r.message||String(r),'promise')});
 function statPing(){if(!STAT_URL||/test/.test(location.hash)||document.hidden)return;let id,name='';const u=TG&&TG.initDataUnsafe&&TG.initDataUnsafe.user;
   if(u){id='tg:'+u.id;name=u.username?'@'+u.username:[u.first_name,u.last_name].filter(Boolean).join(' ')}
   else{try{id=localStorage.getItem('printls_sid');if(!id){id='br:'+Math.random().toString(36).slice(2,12);localStorage.setItem('printls_sid',id)}}catch(e){return}}
-  try{fetch(STAT_URL+'/ping',{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({id,name,tg:!!u,loc:S.loc,money:Math.floor(S.money),pr:S.pr.length,made:S.made,v:APPV}),keepalive:true}).catch(()=>{})}catch(e){}}
+  const f=fpsStat(performance.now());try{fetch(STAT_URL+'/ping',{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({id,name,tg:!!u,loc:S.loc,money:Math.floor(S.money),pr:S.pr.length,made:S.made,v:APPV,fps:f.avg,fmin:f.min,eco:S.eco,err:window.__scriptErr||0,tab,sess:Math.round((Date.now()-SESS0)/1000),dpr:window.devicePixelRatio,ua:navigator.userAgent.slice(0,60),goal:String(goal()).slice(0,80)}),keepalive:true}).catch(()=>{})}catch(e){}}
 setTimeout(statPing,8000);setInterval(statPing,120000); // вход и раз в 2 минуты, пока игра на экране
 
 </script>
