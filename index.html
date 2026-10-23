@@ -268,7 +268,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.20.2'; // номер версии подставляет release.sh
+const APPV='0.20.3'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=18; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -323,6 +323,7 @@ const front=i=>{const L=lay();let FR=FRM.get(layK);if(!FR)FRM.set(layK,FR=[]);if
 // маршрут по проходам: вдоль ряда, потом по левому проходу x=.22, потом вдоль ряда к цели
 const route=(a,b)=>Math.abs(a[1]-b[1])<.05?[b]:[[.22,a[1]],[.22,b[1]],b];
 const plen=(a,pts)=>{let d=0,c=a;for(const q of pts){d+=Math.abs(q[0]-c[0])+Math.abs(q[1]-c[1]);c=q}return d};
+const packT=()=>BAL.packT/mod('pack')/(1+.03*S.team.pack.lv); // время упаковки одной коробки: исследование и обучение (+3%/ур.)
 const vOf=k=>BAL.walk[k]*Math.pow(BAL.walkLv,S.team[k].lv)*(1+.25*(S.up.conv||0))*(S.broke?.5:1)*mod('walk');
 const capOf=k=>{const b=(BAL.cap[k]+BAL.capLv[k]*S.team[k].lv+(k==='ship'?4*(S.up.van||0):0))*(k==='op'?1+.5*(S.up.farmsw||0):1),m=mod('cap');return m>1?Math.ceil(b*m-1e-9):Math.round(b)}; // бонус ПО фермы округляем вверх, чтобы каждый уровень был виден
 const road=()=>BAL.road[S.loc]*(night()?BAL.roadNight:1)/(1+.1*(S.up.conv||0))/mod('road');
@@ -334,7 +335,7 @@ const sr=k=>{const r=S.team[k],n=r.n;if(!n)return 0;
   if(ST_FIX.includes(k))return n*BAL.rate[k]*Math.pow(1.3,r.lv)*(1+.25*(S.up.conv||0))*(S.broke?.5:1)*(k==='otk'?mod('otk'):1);
   const c=capOf(k);
   if(k==='op')return n*c/(c*BAL.load*2+opTrip()/vOf('op'));
-  if(k==='pack'){const L=lay();return n*c/(c*(BAL.packT/mod('pack')+BAL.load)+2*plen(L.sPack,[L.sDock])/vOf('pack'))}
+  if(k==='pack'){const L=lay();return n*c/(c*(packT()+BAL.load)+2*plen(L.sPack,[L.sDock])/vOf('pack'))}
   return n*c/(c*BAL.load+road())};
 const maxPr=()=>Math.min(S.racks*6,Lc().max);
 const pcost=t=>PT[t].c*Math.pow(BAL.pcF,S.cnt[t]||0);
@@ -434,7 +435,7 @@ function stepPack(a,dt){const L=lay(),v=vOf('pack'),c=capOf('pack');
   for(let g=0;g<40&&dt>1e-9;g++){
     if(a.w>0){const u=Math.min(a.w,dt);a.w-=u;dt-=u;continue}
     if(a.st==='pack'){
-      if(a.c<c&&S.q.pack>=1){const need=BAL.packT/mod('pack')-a.t;if(dt>=need){dt-=need;a.t=0;a.b=a.b||{};bMix(a.b,qTake('pack',1));a.c++;continue}a.t+=dt;return}
+      if(a.c<c&&S.q.pack>=1){const need=packT()-a.t;if(dt>=need){dt-=need;a.t=0;a.b=a.b||{};bMix(a.b,qTake('pack',1));a.c++;continue}a.t+=dt;return}
       if(a.c&&a.c<c&&(a.iw||0)<2){const u=Math.min(dt,2-(a.iw||0));a.iw=(a.iw||0)+u;dt-=u;continue} // ждёт до 2 с, вдруг поднесут ещё
       if(a.c){a.iw=0;a.path=[L.sDock];a.st='go';continue}return}
     if(a.path.length){const r=walkTo(a,dt,v);if(r<0)return;dt=r}
@@ -666,7 +667,7 @@ function hintText(){const f=[...stages()].reverse().find(k=>S.q[k]>=qcap(k)-.01)
   if(S.pr.every(x=>x.st==='nopl'))return S.money>=plPrice()?'👉 Кончился пластик — купи катушку под цехом':'👉 Кончился пластик — отвези готовое, деньги пойдут на катушку';
   if(f){const r=S.team[f],nm='«'+(f==='ship'?'Склад у ворот':ROLE[f].n)+'» '+zab(f)+' '+qcap(f)+'/'+qcap(f);
     if(!r.n&&(ST_FIX.includes(f)||S.made>400))return'👉 '+nm+' — '+(r.pl?'найми ':'купи рабочее место и найми ')+ROLE[f].one+'а во вкладке «Люди»';
-    return'👉 '+nm+' — тапни '+(f==='ship'?'машину':'стол')+(r.n?', найми ещё людей':'')+' или расширь в «Участках»'}
+    return'👉 '+nm+(r.n?' — не успевают: обучи или найми ещё в «Людях», расширь в «Участках»':' — тапни '+(f==='ship'?'машину':'стол')+' или расширь в «Участках»')}
   if(S.pr.some(x=>x.st==='done')&&!tm('op'))return'👉 Тапни принтер с ✓ — сними готовый стол';
   if(S.q.pack>=1&&!tm('pack'))return'👉 Тапни стол упаковки';
   if(S.q.ship>=1&&!tm('ship'))return'👉 Тапни машину — отвези заказ и получи деньги';
@@ -717,7 +718,7 @@ const GATE={shop:['🛒 Магазин',()=>S.made>=5||S.pr.length>1],board:['�
   rs:['🔬 Исследования',()=>S.loc>=1&&S.made>=50],sat:['🏪 Бизнесы',()=>S.loc>=2&&S.made>=100]};
 const opn=k=>!!(S.seen&&S.seen[k]); // система уже открыта
 function gates(){let nw=0;for(const k in GATE)if(!opn(k)&&GATE[k][1]()){S.seen=S.seen||{};S.seen[k]=1;nw=1;toast('✨ Открыто: '+GATE[k][0])}if(nw)render()}
-const TRN={op:'Обучить: шаг +10%, тележка +1',pack:'Обучить: шаг +10%, тележка +1',ship:'Обучить: фургон +4 места',otk:'Обучить +30%',post:'Обучить +30%'};
+const TRN={op:'Обучить: шаг +10%, тележка +1',pack:'Обучить: шаг +10%, упаковка +3%, тележка +1',ship:'Обучить: фургон +4 места',otk:'Обучить +30%',post:'Обучить +30%'};
 const lockTxt=lv=>'<span class="tag">🔒 '+LOC[lv].n+'</span>';
 const U={ // живые подписи, обновляются 10 раз в секунду
   pl:()=>(S.pl/1000).toFixed(2).replace('.',',')+' кг '+P().m,
@@ -1496,7 +1497,7 @@ function frame() {
   const wr = a => a.w > 0 && a.wT > 0 ? 1 - a.w / a.wT : null;
   S.ag.op.forEach((a, i) => actRing(P_.op[i], 'op', wr(a), a.st === 'wait' && !(a.w > 0)));
   P_.op.slice(S.ag.op.length).forEach(p => actRing(p, 'op', null)); P_.pack.slice(S.ag.pack.length).forEach(p => actRing(p, 'pack', null));
-  S.ag.pack.forEach((a, i) => actRing(P_.pack[i], 'pack', a.w > 0 ? wr(a) : a.st === 'pack' && a.c < capOf('pack') && S.q.pack >= 1 && a.t > 0 ? a.t / BAL.packT : null, a.st === 'wait' && !(a.w > 0)));
+  S.ag.pack.forEach((a, i) => actRing(P_.pack[i], 'pack', a.w > 0 ? wr(a) : a.st === 'pack' && a.c < capOf('pack') && S.q.pack >= 1 && a.t > 0 ? a.t / packT() : null, a.st === 'wait' && !(a.w > 0)));
   P_.otk.forEach(p => actRing(p, 'otk', S.q.otk >= 1 ? S.team.otk.a % 1 : null));
   P_.post.forEach(p => actRing(p, 'post', S.q.post >= 1 ? S.team.post.a % 1 : null));
   actRing(P_.cr, 'ship', f0 && f0.st === 'dock' && S.q.ship >= 1 && f0.t > 0 ? Math.min(1, f0.t / BAL.load) : null);
