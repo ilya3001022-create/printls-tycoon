@@ -268,7 +268,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.20.3'; // номер версии подставляет release.sh
+const APPV='0.20.4'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=18; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -461,7 +461,8 @@ function offScreen(dt){const f=stages()[0];
     if(k==='op'&&r.a>=1){const busy=new Set();for(const b of S.ag.op)for(const i of b.tg)busy.add(i);
       for(let i=0;i<S.pr.length&&r.a>=1;i++){const x=S.pr[i];if(x.st==='done'&&!busy.has(i)){if(!clear(x,i))break;r.a-=1}}}
     if(k==='pack'){const n=Math.floor(Math.min(r.a,S.q.pack,qcap('ship')-S.q.ship));if(n>0){qPut('ship',qTake('pack',n));r.a-=n}}
-    if(k==='ship'){const n=Math.floor(Math.min(r.a,S.q.ship));if(n>0){r.a-=n;S.cv=(S.cv||0)+n/capOf('ship');deliver(qTake('ship',n))}}}}
+    if(k==='ship'){const n=Math.floor(Math.min(r.a,S.q.ship*(S.ag.ship.some(f=>f.st==='dock')?e/r.n:1))); // фургон у ворот ждёт — закадровые берут только свою долю, иначе видимые уезжают пустыми
+     if(n>0){r.a-=n;S.cv=(S.cv||0)+n/capOf('ship');deliver(qTake('ship',n))}}}}
 function tapVan(){const f=S.ag.ship.find(v=>v.st==='dock');if(!f)return 0;const n=Math.min(capOf('ship')-f.c,Math.floor(S.q.ship));f.b=f.b||{};bMix(f.b,qTake('ship',n));f.c+=n;if(!f.c)return 0;depart(f);return 1}
 // доска заказов: всегда 3 заказа на разные изделия; детали идут в заказ, если печатаем это изделие
 function newOrd(){const ok=PR.map((x,i)=>i).filter(i=>S.unl[i]),nx=PR.findIndex((x,i)=>!S.unl[i]&&x.lv<=S.loc);
