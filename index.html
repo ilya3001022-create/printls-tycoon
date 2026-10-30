@@ -268,7 +268,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.20.4'; // номер версии подставляет release.sh
+const APPV='0.20.3'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=18; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -382,7 +382,7 @@ function clear(x,i){const f=stages()[0];if(S.q[f]+1>qcap(f)+1e-6)return false;qP
 function proc(k,n){
   const sg=stages(),i=sg.indexOf(k),nx=sg[i+1];if(i<0||!nx)return 0;
   n=Math.floor(Math.min(n,S.q[k],qcap(nx)-S.q[nx]));if(n<=0)return 0;const b=qTake(k,n);
-  if(k==='otk'){for(const pi in b)for(let j=0;j<b[pi];j++){if(Math.random()<defect()){S.rej++;b[pi]--}}qPut(nx,b)}
+  if(k==='otk'){for(const pi in b)for(let j=0,n=b[pi];j<n;j++){if(Math.random()<defect()){S.rej++;b[pi]--}}qPut(nx,b)}
   else qPut(nx,b);
   return n}
 // средняя цена и граммы детали в текущем выпуске (стеллажи могут печатать разное)
@@ -547,7 +547,7 @@ function offline(){
   const p=mix(),per=p.p*pm()*(1-defect()),flow=flowOff(),sum=S.pr.reduce((a,x)=>a+PT[x.t].sp,0),pr=prodRate();
   let pcs=flow*el*(S.mg.srv?1:.5);if(!S.mg.sup){pcs=Math.min(pcs,S.pl/p.g);S.pl=Math.max(0,S.pl-pcs*p.g)}
   const Dk=demand()*el*(S.mg.srv?1:.5),rv=pcs*per,sold=Math.min(rv,Dk)+Math.min(Math.max(0,rv-Dk),Dk)*BAL.sale+Math.max(0,rv-2*Dk)*BAL.bulkSale; // спрос и в офлайне
-  rsDone();let g=Math.max(0,sold-(wagesAvg()+sum*(pr?flow/pr:0)*elecK())*el*(S.mg.srv?1:.5))+satInc()*el; // бизнесы-спутники работают и без игрока
+  rsDone();let g=Math.max(0,sold-(wagesAvg()+sum*(pr?flow/pr:0)*elecK())*el*(S.mg.srv?1:.5)-(S.mg.sup?pcs*p.g/1000*plPrice()*1.1:0))+satInc()*el; // бизнесы-спутники работают и без игрока
   if(!flow&&S.made&&typeof modal==='function')modal('😴 Тебя не было '+dur(raw),'Ферма стояла: без людей готовые детали никто не снимает, не пакует и не возит.<br><br>Найми оператора, упаковщика и курьера во вкладке «Люди» — они работают и без тебя.');
   if(g>0){S.made+=Math.floor(pcs);
     earn(g,1);modal('😴 Тебя не было '+dur(raw),'Ферма заработала <b>'+fm(g)+'</b> (за вычетом зарплат и света)'+(raw>max?'<br><span class="sub">Склад полон: копится не больше '+dur(max)+'</span>':'')+
@@ -591,10 +591,10 @@ const MIG={
   8:s=>{const l=Math.min(5,s.loc||0),f=NEWC[l]/OLDC[l];s.money=Math.max(500,(s.money||0)*f);s.best=(s.best||0)*f;s.run=(s.run||0)*f;s.all=(s.all||0)*f;s.rate=0;s.exp=0;s.fm=0;s.fw=[];s.board=[];s.offer=null;s.order=null;return s}};
 function merge(b,j){for(const k in j){const v=j[k];if(v&&typeof v==='object'&&!Array.isArray(v)&&b[k]&&typeof b[k]==='object'&&!Array.isArray(b[k]))merge(b[k],v);else b[k]=v}return b}
 function upgrade(j){let v=j.ver||0;while(v<VER&&MIG[v]){j=MIG[v](j);v++}j.ver=VER;return merge(fresh(),j)}
-let hadLocal=false;
+let hadLocal=false,bootLast=0;
 function load(){try{let j=JSON.parse(localStorage.getItem(KEY));
   if(!j)for(const v of [7,6]){const o=JSON.parse(localStorage.getItem('printls_tycoon_v'+v)||'null');if(o&&o.pr){o.ver=v;j=o;break}}
-  if(j&&j.pr){hadLocal=true;return upgrade(j)}}catch(e){}return fresh()}
+  if(j&&j.pr){hadLocal=true;bootLast=j.last||0;return upgrade(j)}}catch(e){}return fresh()}
 function save(){S.last=Date.now();S.ver=VER;const j=JSON.stringify(S);try{localStorage.setItem(KEY,j)}catch(e){}cloudSave(j)}
 // облако Telegram: значение до 4096 символов — режем на куски
 let TG=null,cloudT=0;
@@ -620,14 +620,15 @@ function cloudSave(j,now){if(!TG||!TG.CloudStorage||!cloudReady||cloudBusy&&Date
   try{for(let i=0;i<n;i++)TG.CloudStorage.setItem(sl+'_'+i,j.slice(i*4000,(i+1)*4000),done)}catch(e){cloudBusy=0}}
 // прочитать одну копию: заголовок → куски → сверка длины и хеша; cb(объект или null)
 function cloudRead(h,key,cb){const [n,len,hs]=String(h||'').split('|').map(Number);if(!n){cb(null);return}const ks=[...Array(n)].map((_,i)=>key(i));
-  try{TG.CloudStorage.getItems(ks,(e,v)=>{if(e||!v){cb(null);return}const t=ks.map(k=>v[k]||'').join('');if(t.length!==len||hsh(t)!==hs){cb(null);return}
-    try{const o=JSON.parse(t);cb(o&&o.pr?o:null)}catch(x){cb(null)}})}catch(e){cb(null)}}
+  try{TG.CloudStorage.getItems(ks,(e,v)=>{if(e||!v){cb(undefined);return}const t=ks.map(k=>v[k]||'').join('');if(t.length!==len||hsh(t)!==hs){cb(null);return}
+    try{const o=JSON.parse(t);cb(o&&o.pr?o:null)}catch(x){cb(null)}})}catch(e){cb(undefined)}}
 function cloudLoad(){if(!TG||!TG.CloudStorage){cloudReady=true;return}
-  const fin=o=>{if(o&&(!hadLocal||o.last>S.last)){S=upgrade(o);hadLocal=true;render();offline()}cloudReady=true;save()};
-  try{TG.CloudStorage.getItems(['ah','bh','csh'],(e,hv)=>{if(e||!hv){cloudReady=!hadLocal?false:true;if(!hadLocal)setTimeout(cloudLoad,5000);return} // облако не ответило: без своей копии ждём и пробуем снова, не пишем
+  const retry=()=>{cloudReady=false;cloudLoad.n=(cloudLoad.n||0)+1;setTimeout(cloudLoad,Math.min(60000,cloudLoad.n*5000))}; // облако не ответило — не пишем, пока не прочитаем
+  const fin=o=>{if(o&&(!hadLocal||o.last>bootLast)){S=upgrade(o);hadLocal=true;render();offline()}cloudReady=true;save()};
+  try{TG.CloudStorage.getItems(['ah','bh','csh'],(e,hv)=>{if(e||!hv){retry();return} // облако не ответило: без своей копии ждём и пробуем снова, не пишем
     const c=[['a',hv.ah],['b',hv.bh]].filter(x=>x[1]).sort((x,y)=>(+String(y[1]).split('|')[3]||0)-(+String(x[1]).split('|')[3]||0));
-    const next=k=>{if(k<c.length){cloudRead(c[k][1],i=>c[k][0]+'_'+i,o=>{if(o){cloudSlot=c[k][0]==='a'?1:0;fin(o)}else next(k+1)});return}
-      if(hv.csh)cloudRead(hv.csh,i=>'cs_'+i,fin);else fin(null)}; // старый формат (до 0.18.8) — одна ячейка cs_
+    const next=k=>{if(k<c.length){cloudRead(c[k][1],i=>c[k][0]+'_'+i,o=>{if(o){cloudSlot=c[k][0]==='a'?1:0;fin(o)}else if(o===undefined)retry();else next(k+1)});return}
+      if(hv.csh)cloudRead(hv.csh,i=>'cs_'+i,o=>o===undefined?retry():fin(o));else fin(null)}; // старый формат (до 0.18.8) — одна ячейка cs_
     next(0)})}catch(x){cloudReady=true}}
 const haptic=t=>{try{TG&&TG.HapticFeedback.impactOccurred(t||'light')}catch(e){}};
 
@@ -1196,6 +1197,8 @@ function buildPrinters() {
   sun.shadow.needsUpdate = true;
 }
 let own = []; // текстуры и материалы этой сборки — освобождаем при следующей
+const geoSet = () => { const s = new Set(); if (world) world.traverse(o => { if (o.geometry) s.add(o.geometry); }); return s; };
+const freeGeo = old => { for (const g of geoSet()) old.delete(g); for (const g of old) if (![...CG.values()].includes(g)) g.dispose(); }; // пол, стены и пр. новой сборки — новые объекты
 function build() {
   for (const o of own) o.dispose(); own = [];
   if (world) scene.remove(world);
@@ -1450,7 +1453,7 @@ function frame() {
   const dt = Math.min(.1, clock.getDelta()); T += dt;
   if (!ready || tab !== 'farm' || !wrap.clientWidth) return;
   const key = S.racks + '|' + S.loc + '|' + S.eco, pk = (S.up.ams ? 'a' : '') + S.pr.slice(0, L ? L.VR * 6 : 108).map(x => x.t + '' + (x.pi != null ? x.pi : S.prod)).join(',');
-  if (key !== built) { built = key; prKey = pk; build(); fps.from = T; fps.n = fps.t = 0; } else if (pk !== prKey) { prKey = pk; buildPrinters(); }
+  if (key !== built) { built = key; prKey = pk; const og = geoSet(); build(); freeGeo(og); fps.from = T; fps.n = fps.t = 0; } else if (pk !== prKey) { prKey = pk; const og = geoSet(); buildPrinters(); freeGeo(og); }
   const on = !(S.out > 0) || S.up.ups;
   hemi.intensity = on ? 1.6 : .35; sun.intensity = on ? 2.2 : .25;
   for (const v of printers) {
@@ -1517,9 +1520,9 @@ function frame() {
   if (VIS.cash > 0 && (lt += dt) > .8) {
     const s = label('+' + fm(VIS.cash), false); s.material.map.dispose();
     s.material.map = canvasTex(256, 64, g => { g.fillStyle = '#2ecc71'; g.font = '900 40px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('+' + fm(VIS.cash), 128, 34); });
-    s.position.set(L.dock + .6, 1.2, L.z0 + 1.65); world.add(s); flo.push({s, t: 0}); VIS.cash = 0; // клиент принял груз — «+₽» над местом стоянки фургона, не улетает с ним за кадр lt = 0;
+    s.position.set(L.dock + .6, 1.2, L.z0 + 1.65); world.add(s); flo.push({s, t: 0}); VIS.cash = 0; lt = 0; // клиент принял груз — «+₽» над местом стоянки фургона, не улетает с ним за кадр
   }
-  flo = flo.filter(f => { f.t += dt; f.s.position.y += dt * .5; f.s.material.opacity = 1 - f.t / 1.4; if (f.t > 1.4) { world.remove(f.s); f.s.material.map.dispose(); return false; } return true; });
+  flo = flo.filter(f => { f.t += dt; f.s.position.y += dt * .5; f.s.material.opacity = 1 - f.t / 1.4; if (f.t > 1.4) { world.remove(f.s); f.s.material.map.dispose(); f.s.material.dispose(); return false; } return true; });
   if (arm) arm.rotation.y = Math.sin(T * 1.3) * .9; // робот переносит коробки
   { const n = Math.ceil((S.trash || 0) / 2.5); trashG.forEach((b, i) => b.visible = i < n); }  // мусор
   if (lampL) { const nt = night(); lampL.intensity = nt ? 2.2 : 0; lampB.material.color.set(nt ? '#fff3c4' : '#9aa0a8'); } // фонарь ночью
