@@ -68,6 +68,20 @@ h3{margin:0 0 6px;font-size:15px}
 .ic{width:46px;height:46px;flex:none;background:center/contain no-repeat}
 .ic.sm{display:inline-block;width:1.25em;height:1.25em;vertical-align:-.3em;margin-right:2px}
 nav button i.ic{display:block;width:26px;height:26px;margin:0 auto 1px}
+.rkbar{gap:8px;margin-bottom:10px}.rkbar .btn{flex:1;min-height:46px;font-size:14px}
+#sheet{position:fixed;inset:0;z-index:8;background:#0006;overscroll-behavior:contain}#sheet[hidden]{display:none}
+.sh-c{position:absolute;left:0;right:0;bottom:0;margin:0 auto;max-width:720px;height:calc(var(--tg-viewport-stable-height,100dvh)*.56);min-height:300px;max-height:92%;background:#141a25;border-radius:18px 18px 0 0;border-top:1px solid #2b3549;box-shadow:0 -8px 30px #000a;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)}
+.sh-h{display:flex;align-items:center;gap:8px;padding:10px 8px 8px 16px;flex:none}.sh-h b{font-size:17px}
+.sh-x{width:44px;height:44px;flex:none;border:0;border-radius:12px;background:var(--card2);color:var(--tx);font-size:20px;font-family:inherit}
+.sh-b{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:4px 16px 10px}
+.sh-ft{flex:none;padding:8px 16px 10px;border-top:1px solid #222b3b;background:#141a25}.sh-ft .sub{margin-top:4px;text-align:center}
+.sh-buy{width:100%;min-height:52px;font-size:16px}
+.sh-bt{min-height:44px}
+.sh-ch{position:relative;display:flex;align-items:center;justify-content:center;min-width:104px;min-height:44px;padding:0 12px;border-radius:10px;background:var(--card2);font-weight:700;font-size:13px;white-space:nowrap}
+.sh-ch select{position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:16px}
+.sh-f{display:flex;gap:8px;padding:0 16px 6px;flex:none}.sh-f button{flex:1;min-height:44px;border:0;border-radius:10px;background:var(--card2);color:var(--tx);font-weight:700;font-family:inherit;font-size:13px}.sh-f button.on{background:var(--ac);color:#15100a}
+.sh-r{display:flex;align-items:center;gap:8px;width:100%;min-height:52px;padding:6px 12px;margin-bottom:6px;border:0;border-radius:12px;background:var(--card);color:var(--tx);font-family:inherit;font-size:14px;text-align:left}
+.bdg{font-style:normal;font-weight:900;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff}.bdg.e{background:var(--bad)}.bdg.p{background:#2ecc71}
 </style></head><body>
 <header><div class="row">
   <div class="grow"><div class="money" id="m">0 ₽</div><div class="sub" id="hs"></div></div>
@@ -268,7 +282,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.20.3'; // номер версии подставляет release.sh
+const APPV='0.21'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=18; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -605,8 +619,8 @@ function tgInit(){const W=window.Telegram&&Telegram.WebApp;if(TG||!W||!W.initDat
   if(typeof S!=='undefined'&&S)cloudLoad()}
 // системная «Назад» Telegram: закрывает мини-игру или окно, потом возвращает на «Цех»; на «Цехе» — не нужна
 function goBack(){const g=document.getElementById('mg');if(g){clearInterval(g._t);g.remove();return}
-  if($('mod').innerHTML){$('mod').innerHTML='';if(MQ.length)modal(...MQ.shift());return}if(tab!=='farm'){tab='farm';render()}}
-function backBtn(){if(!TG||!TG.BackButton)return;const need=!!document.getElementById('mg')||!!$('mod').innerHTML||tab!=='farm';
+  if($('mod').innerHTML){$('mod').innerHTML='';if(MQ.length)modal(...MQ.shift());return}if(SH){shClose();return}if(tab!=='farm'){tab='farm';render()}}
+function backBtn(){if(!TG||!TG.BackButton)return;const need=!!document.getElementById('mg')||!!$('mod').innerHTML||!!SH||tab!=='farm';
   if(need!==backBtn.v){backBtn.v=need;try{need?TG.BackButton.show():TG.BackButton.hide()}catch(e){}}}
 // облако: две ячейки по очереди (a/b), в каждой куски по 4000 символов + заголовок «кусков|длина|хеш|время».
 // Заголовок пишем только после подтверждённой записи всех кусков: закрыли игру посреди записи — цела другая ячейка.
@@ -789,6 +803,7 @@ function roleCard(k){const r=S.team[k],R=ROLE[k];return `<div class="card"><h3>$
 function view(){
   const p=P(),full=S.pr.length>=maxPr();
   if(tab==='farm'){let h=`
+  <div class="row rkbar"><button class="btn sec" data-a="rklist">🗄 Все стеллажи</button>${S.racks*6<Lc().max?`<button class="btn" data-a="rack" data-c="${rcost()}">+ Стеллаж · ${fm(rcost())}</button>`:`<button class="btn sec" disabled>Больше нет места</button>`}</div>
   <div class="card"><div class="row"><div class="grow"><h3>Принтеры <span data-u="cnt"></span></h3><div class="sub">печатаем ${icn(PR_IC[S.prod],1)}«${p.n}» · <span data-u="rate"></span></div></div>
    <button class="btn" data-a="clrall" data-u="done"></button></div>
    ${opn('boost')?'<button class="btn sec" style="width:100%;margin-top:8px" data-a="boost" data-u="boost"></button>':''}
@@ -860,7 +875,7 @@ function render(){
   $('v').innerHTML=view();$('scene').style.display=tab==='farm'?'block':'none';
   $('nav').innerHTML=TABS.filter(t=>t[0]==='farm'||opn(t[0])).map(t=>`<button data-a="tab" data-i="${t[0]}" class="${t[0]===tab?'on':''}">${icn(TAB_IC[t[0]])||'<b>'+t[1]+'</b>'}${t[2]}</button>`).join('');
   sig='';upd()}
-function upd(){backBtn();gates();
+function upd(){shRefresh();backBtn();gates();
   $('m').textContent=fm(S.money);
   {const n=S.rate-S.exp;$('hs').textContent='≈ '+(n<0?'−'+fm(-n):fm(n))+'/с чистыми · '+P().n}
   $('loc').textContent=Lc().n;
@@ -873,7 +888,8 @@ function upd(){backBtn();gates();
 const W={rq:()=>{const q=S.rq,r=q&&RS.find(x=>x.id===q.id);return r?Math.max(0,100-rsLeft()/(q.dur||rsTime(r))*100):0},bo:i=>{const b=S.board[+i];return b?b.got/b.need*100:0},bld:()=>{const b=S.build;return b?100-(b.end-Date.now())/1000/BAL.bt[b.to]*100:0}};
 let fullT=0;
 const A={
-  tab:i=>{tab=i;window.scrollTo(0,0)},
+  tab:i=>{SH&&shClose();tab=i;window.scrollTo(0,0)},
+  rklist:()=>shOpen({m:'list'}),rkopen:i=>shOpen({m:'rack',r:+i,from:SH&&SH.m==='list'?1:0}),rkclose:()=>shClose(),rkf:i=>{SHF=+i},
   mb:i=>{const b=MB[i];$('mod').innerHTML='';b&&b.f&&b.f();if(!$('mod').innerHTML&&MQ.length)modal(...MQ.shift())},
   p:i=>{const x=S.pr[i];if(!x)return;if(x.st==='done'){if(!clear(x)&&performance.now()-fullT>3000){fullT=performance.now();const f=stages()[0];toast('📦 Стол «'+ROLE[f].n+'» забит ('+qcap(f)+'/'+qcap(f)+') — разбери его или расширь в «Участках»')}}
     else if(x.st==='fail')fixPrinter(x,i,false);
@@ -931,13 +947,51 @@ const A={
     const o=JSON.parse(j);if(!o.pr)throw 0;S=upgrade(o);S.last=Date.now();$('mod').innerHTML='';save();cloudSave(JSON.stringify(S),1);render();toast('📥 Прогресс загружен')}catch(e){toast('❌ Код не подошёл — проверь, что скопирован целиком')}},
   reset:()=>modal('Начать с нуля?','Сотрётся всё, включая звёзды.',[{t:'Стереть',f:()=>{const d=S.daily;S=fresh();S.daily=d;S.intro=true;render()}},{t:'Нет',sec:1}]),
 };
-const LIGHT=new Set(['p','clrall','st','spool','mb','offer','boost','skip','bprod','game']);
+const LIGHT=new Set(['rklist','rkopen','rkclose','rkf','p','clrall','st','spool','mb','offer','boost','skip','bprod','game']);
 document.addEventListener('click',e=>{if(S&&(S.snd||S.mus))audio();const b=e.target.closest('[data-a]');if(!b||b.disabled||b.tagName==='SELECT')return;const a=b.dataset.a;
   const m0=S.money;A[a](b.dataset.i);sound('tap');haptic();if(S.money-m0>.5)pop(e.clientX,e.clientY,'+'+fm(S.money-m0));if(a==='ctask'||a==='offer'||a==='bclaim'||!LIGHT.has(a)||S.pr.length+':'+S.prod!==sig&&a==='mb')render();else upd();save()});
 document.addEventListener('change',e=>{const el=e.target.closest('select[data-a]');if(!el)return;A[el.dataset.a](el.value,el);upd();save()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){save();cloudSave(JSON.stringify(S),1)}}); // свернули — сразу и в облако
 window.addEventListener('pagehide',()=>{save();cloudSave(JSON.stringify(S),1)}); // закрыли вкладку / встроенный браузер
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){} // просим браузер не чистить хранилище
+// ---------- нижняя карточка стеллажа и список стеллажей (состояние — вне S, в сохранение не идёт) ----------
+let SH=null,SHF=0,SHh='';
+const rkPlaces=r=>Math.max(0,Math.min(6,maxPr()-r*6)),rkN=r=>Math.max(0,Math.min(6,S.pr.length-r*6));
+const rkFree=r=>rkPlaces(r)-rkN(r),rkFail=r=>S.pr.slice(r*6,r*6+6).filter(x=>x.st==='fail').length;
+function buyPick(){let b=-1;for(let i=0;i<PT.length;i++)if(PT[i].lv<=S.loc){if(b<0||pcost(i)<=S.money)b=i}return b} // лучшая из доступных, на которую хватает денег (иначе самая дешёвая)
+function rkBadge(r){if(rkFail(r))return'!';if(rkFree(r)>0){const b=buyPick();if(b>=0&&S.money>=pcost(b))return'+'}return''}
+function rkState(r){const a=S.pr.slice(r*6,r*6+6),f=a.filter(x=>x.st==='fail').length,np=a.filter(x=>x.st==='nopl').length,d=a.filter(x=>x.st==='done').length;
+  return f?`<span class="bad">аварий: ${f}</span>`:np?`<span style="color:var(--warn)">нет пластика: ${np}</span>`:d?`<span class="ok">готово к снятию: ${d}</span>`:a.length?'<span class="ok">работает</span>':'пусто'}
+function rkRows(){const o=[];for(let r=0;r<S.racks;r++){if(SHF===1&&!rkFail(r))continue;if(SHF===2&&rkFree(r)<=0)continue;o.push([r,rkBadge(r)])}return o}
+function shHtml(){
+  if(SH.m==='list'){const rows=rkRows(),fl=['Все','Аварии','Есть место'];
+    return `<div class="sh-h"><div class="grow"><b>Все стеллажи</b><div class="sub">${S.pr.length} из ${maxPr()} принтеров · ${S.racks} ${pl3(S.racks,'стеллаж','стеллажа','стеллажей')}</div></div><button class="sh-x" data-a="rkclose" aria-label="Закрыть">✕</button></div>
+     <div class="sh-f">${fl.map((n,i)=>`<button class="${SHF===i?'on':''}" data-a="rkf" data-i="${i}">${n}</button>`).join('')}</div>
+     <div class="sh-b">${rows.length?rows.map(([r,b])=>`<button class="sh-r" data-a="rkopen" data-i="${r}"><span class="grow"><b>Стеллаж ${r+1}</b> <span class="sub">${rkN(r)}/${rkPlaces(r)} · </span>${rkState(r)}</span>${b?`<i class="bdg ${b==='!'?'e':'p'}">${b}</i>`:''}<span class="mu">›</span></button>`).join(''):'<div class="sub" style="padding:14px">Таких стеллажей нет.</div>'}</div>`}
+  const r=SH.r,n=rkN(r),pl=rkPlaces(r),opts=PR.map((x,i)=>S.unl[i]?i:-1).filter(i=>i>=0);
+  const shelf=s=>{const v=S.rk[s],pid=prodOf(s*3);return `<div class="card row" style="margin:0 0 8px"><div class="grow"><div class="sub">${s%2?'Верхняя':'Нижняя'} полка · 3 принтера</div><b>${icn(PR_IC[pid],1)}${PR[pid].n}</b> <span class="sub">${v==null||!S.unl[v]?'(основное)':''}</span></div>${opts.length>1?`<label class="sh-ch">Изменить ›<select data-a="rk" data-r="${s}"><option value=""${v==null?' selected':''}>основное · ${P().n}</option>${opts.map(i=>`<option value="${i}"${v===i?' selected':''}>${PR[i].n}</option>`).join('')}</select></label>`:''}</div>`};
+  const tech=MG[0],hasT=!!S.mg[tech.k];
+  const body=`<div class="sh-b">${shelf(r*2+1)}${shelf(r*2)}
+   <div class="card" style="margin:0 0 8px"><b>Обслуживание</b><div class="row" style="margin-top:8px;gap:8px">
+    ${hasT?`<span class="tag auto" style="padding:10px">🔧 Ремонтник в штате</span>`:tech.lv>S.loc?`<span class="tag" style="padding:10px">🔧 Ремонтник — ${LOC[tech.lv].n}</span>`:`<button class="btn sec sh-bt" data-a="mg" data-i="0" data-c="${tech.c}">🔧 Ремонтник · ${fm(tech.c)}</button>`}
+    <button class="btn sec sh-bt" data-a="tab" data-i="shop">Запчасти ›</button></div>
+    <div class="sub" style="margin-top:6px">Аварию чинит тап по красному принтеру.</div></div></div>`;
+  const b=buyPick(),free=S.pr.length<maxPr();let foot;
+  if(free&&b>=0){const c=pcost(b),tr=S.pr.length/6|0;foot=`<button class="btn sh-buy" data-a="buyp" data-i="${b}" data-c="${c}">+ ${PT[b].n} · ${fm(c)}</button><div class="sub">${rkFree(r)>0?'Встанет на этот стеллаж.':'Здесь мест нет — принтер встанет на стеллаж '+(tr+1)+' (первое свободное место).'}</div>`}
+  else if(S.racks*6<Lc().max)foot=`<button class="btn sh-buy" data-a="rack" data-c="${rcost()}">+ Стеллаж · ${fm(rcost())}</button><div class="sub">Свободных мест нет — нужен новый стеллаж (+6 мест).</div>`;
+  else{const rep=b>=0&&S.pr.some(x=>x.t<b);foot=`<button class="btn sh-buy" ${rep?`data-a="buyp" data-i="${b}" data-c="${pcost(b)}"`:'disabled'}>${rep?'Заменить худший · '+fm(pcost(b)):'Предел площадки'}</button><div class="sub">«${Lc().n}»: больше ${Lc().max} принтеров не помещается. Дальше — переезд во вкладке «Рост».</div>`}
+  return `<div class="sh-h">${SH.from?`<button class="sh-x" data-a="rklist" aria-label="К списку">‹</button>`:''}<div class="grow"><b>Стеллаж ${r+1}</b><div class="sub">${n}/${pl} ${pl3(pl,'принтер','принтера','принтеров')} · ${rkState(r)}</div></div><button class="sh-x" data-a="rkclose" aria-label="Закрыть">✕</button></div>${body}<div class="sh-ft">${foot}</div>`}
+function shEl(){let e=$('sheet');if(!e){e=document.createElement('div');e.id='sheet';e.hidden=true;e.innerHTML='<div class="sh-c" role="dialog" aria-modal="true"></div>';document.body.appendChild(e);
+  e.addEventListener('click',ev=>{if(ev.target===e)shClose()});e.addEventListener('touchmove',ev=>{if(ev.target===e)ev.preventDefault()},{passive:false});
+  e.addEventListener('change',ev=>{if(ev.target.tagName==='SELECT')ev.target.blur()});
+  e.addEventListener('focusout',()=>setTimeout(shRefresh,60));
+  document.addEventListener('keydown',ev=>{if(ev.key==='Escape'&&SH)shClose()})}return e}
+function shOpen(x){if(tab!=='farm'||!S)return;if(x.m==='rack'&&!(x.r>=0&&x.r<S.racks))return;SH=x;SHh='';const e=shEl();e.hidden=false;document.body.style.overflow='hidden';shRefresh()}
+function shClose(){SH=null;SHh='';const e=$('sheet');if(e)e.hidden=true;document.body.style.overflow=''}
+function rkOpen(r){shOpen({m:'rack',r,from:0})}
+function shRefresh(){if(!SH)return;if(SH.m==='rack'&&SH.r>=S.racks||tab!=='farm'){shClose();return}
+  const e=$('sheet'),c=e.firstChild,ae=document.activeElement;if(ae&&ae.tagName==='SELECT'&&c.contains(ae))return;
+  const h=shHtml();if(h===SHh)return;const bd=c.querySelector('.sh-b'),st=bd?bd.scrollTop:0;SHh=h;c.innerHTML=h;const nb=c.querySelector('.sh-b');if(nb)nb.scrollTop=st}
 // стеллажи: у каждого своё изделие (или основное)
 function rackCard(){const opts=PR.map((x,i)=>S.unl[i]?i:-1).filter(i=>i>=0);if(opts.length<2)return'';
   const n=Math.ceil(Math.min(S.racks*6,Lc().max)/3);
@@ -1102,6 +1156,51 @@ function setLabel(s, text, hot, blink) {
   const n = label(text, hot); s.material.map.dispose(); s.material.map = n.material.map; s.material.needsUpdate = true; n.material.dispose();
 }
 
+// табличка стеллажа «№N» + бейдж: постоянный размер на экране (RK_W x RK_H px); «!» авария, «+» есть место и деньги
+const RK_W = 88, RK_H = 40;
+function rackTex(text, badge, bare) {
+  const bc = badge === '!' ? '#ff4d5e' : badge === '+' ? '#2ecc71' : '';
+  return canvasTex(bare ? 80 : 176, 80, g => {
+    if (bare) { g.fillStyle = bc; g.beginPath(); g.arc(40, 40, 34, 0, 7); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 4; g.stroke(); g.fillStyle = '#fff'; g.font = 'bold 44px system-ui,sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'center'; g.fillText(badge, 40, 43); return; }
+    g.fillStyle = 'rgba(12,16,24,.92)'; g.beginPath(); g.roundRect(3, 4, 170, 72, 20); g.fill();
+    g.strokeStyle = bc || '#ff8a1f'; g.lineWidth = 5; g.stroke();
+    g.fillStyle = '#fff'; g.font = 'bold 40px system-ui,sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'center';
+    if (bc) { g.fillText(text, 62, 42); g.fillStyle = bc; g.beginPath(); g.arc(136, 40, 26, 0, 7); g.fill(); g.fillStyle = '#fff'; g.font = 'bold 38px system-ui,sans-serif'; g.fillText(badge, 136, 43); }
+    else g.fillText(text, 88, 42);
+  });
+}
+const rackBox = (o, ppu, cw, ch) => { // экранный прямоугольник таблички (подпись растёт вверх от точки привязки)
+  const p = o.bp.clone().project(cam), w = o.bare ? RK_H : RK_W; let sx = (p.x + 1) / 2 * cw, sy = (1 - p.y) / 2 * ch;
+  sx = Math.max(w / 2 + 2, Math.min(cw - w / 2 - 2, sx)); sy = Math.max(RK_H + 2, Math.min(ch - 2, sy)); return {sx, sy, w};
+};
+function rackLabels() {
+  const cw = wrap.clientWidth, ch = wrap.clientHeight, ppu = ch / (cam.top - cam.bottom); if (!(ppu > 0) || !cw) return;
+  cam.updateMatrixWorld(); cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+  const bd = rackLb.map(o => window.rkBadge ? rkBadge(o.r) : '');
+  rackLb.forEach(o => o.bare = false);
+  const order = rackLb.map((o, i) => i).sort((i, j) => (rackLb[i].bp.x + rackLb[i].bp.z) - (rackLb[j].bp.x + rackLb[j].bp.z)); // дальние (меньше x+z) первыми
+  order.forEach((i, n) => { const o = rackLb[i], a = rackBox(o, ppu, cw, ch);
+    for (let m = n + 1; m < order.length; m++) { const q = rackLb[order[m]], c = rackBox(q, ppu, cw, ch);
+      if (Math.abs(a.sx - c.sx) < (a.w + c.w) / 2 && Math.abs(a.sy - c.sy) < RK_H) { o.bare = true; break; } } });
+  rackLb.forEach((o, i) => {
+    const b = bd[i], bare = o.bare && !!b, k = b + (bare ? 'b' : '');
+    o.sp.visible = !(o.bare && !b); if (!o.sp.visible) { o.hit = null; return; }
+    if (k !== o.k) { o.k = k; const m = o.sp.material; m.map.dispose(); m.map = rackTex('№' + (o.r + 1), b, bare); m.needsUpdate = true; }
+    o.bare = bare; const bx = rackBox(o, ppu, cw, ch), p = o.bp.clone().project(cam), sx0 = (p.x + 1) / 2 * cw, sy0 = (1 - p.y) / 2 * ch;
+    const rx = new THREE.Vector3(1, 0, -1).normalize().multiplyScalar((bx.sx - sx0) / ppu);
+    o.sp.position.copy(o.bp).add(rx); o.sp.position.y += (sy0 - bx.sy) / (ppu * .83);
+    o.sp.scale.set(bx.w / ppu, RK_H / ppu * (bare ? 1 : 1), 1); o.hit = bx;
+  });
+}
+// тап по табличке: зона не меньше 44 px; возвращает номер стеллажа или -1
+function rackAt(cx, cy) {
+  const r = R.domElement.getBoundingClientRect(); let best = -1, bd = 1e9;
+  for (const o of rackLb) { if (!o.hit || !o.sp.visible) continue;
+    const x = cx - r.left - o.hit.sx, y = cy - r.top - (o.hit.sy - RK_H / 2), hw = Math.max(o.hit.w, 44) / 2, hh = 22;
+    if (Math.abs(x) <= hw && Math.abs(y) <= hh && Math.abs(x) + Math.abs(y) < bd) { bd = Math.abs(x) + Math.abs(y); best = o.r; } }
+  return best;
+}
+
 // ---------- принтеры: похожи на настоящие (Ender — чёрная рама; Bambu A1 — белая консоль; P1S/X1C — коробки со стеклом и AMS) ----------
 const mWhite = M('#eef0f2'), mGrey = M('#c9ced6'), mGraph = M('#3a3f47'), mBlack = M('#1b1e23'), mAlu = M('#9aa3ad'), mPEI = M('#2d2f33'), mBlue = M('#2d6cdf'),
   mScreen = MB('#4fb3ff'), mRed = MB('#ff4d5e'), mYel = MB('#ffc53d'), mGrn = MB('#2ecc71'), mStrip = MB('#f4f7fb');
@@ -1181,7 +1280,7 @@ function person(k) {
 }
 
 // ---------- сборка мира ----------
-let trashG = [], clients = [], lampL = null, lampB = null, arm = null, spools = [], cat = null, board = null, wclock = null, wins = [], puffs = [], coffeeAt = null, LS = 1, conv = [], world = null, L = null, built = '', printers = [], hits = [], van2 = null, people = {}, zones = {}, van = null, drone = null, server = null, flo = [];
+let rackLb = [], trashG = [], clients = [], lampL = null, lampB = null, arm = null, spools = [], cat = null, board = null, wclock = null, wins = [], puffs = [], coffeeAt = null, LS = 1, conv = [], world = null, L = null, built = '', printers = [], hits = [], van2 = null, people = {}, zones = {}, van = null, drone = null, server = null, flo = [];
 const rackPos = rp; // раскладка общая с логикой: lay() и rp() из основного скрипта
 let prG = null, prHits = [], prKey = '';
 function buildPrinters() {
@@ -1200,7 +1299,7 @@ let own = []; // текстуры и материалы этой сборки �
 const geoSet = () => { const s = new Set(); if (world) world.traverse(o => { if (o.geometry) s.add(o.geometry); }); return s; };
 const freeGeo = old => { for (const g of geoSet()) old.delete(g); for (const g of old) if (![...CG.values()].includes(g)) g.dispose(); }; // пол, стены и пр. новой сборки — новые объекты
 function build() {
-  for (const o of own) o.dispose(); own = [];
+  for (const o of own) o.dispose(); own = []; for (const o of rackLb) o.sp.material.map.dispose(); rackLb = [];
   if (world) scene.remove(world);
   world = new THREE.Group(); scene.add(world); L = lay(); prG = null; LS = Math.max(1, Math.max(L.W, L.H) / 7); printers = []; hits = []; people = {}; flo = []; conv = [];
   R.shadowMap.enabled = !S.eco; R.setPixelRatio(S.eco ? 1 : Math.min(1.5, window.devicePixelRatio || 1)); sun.castShadow = !S.eco;
@@ -1302,7 +1401,7 @@ function build() {
   for (let r = 0; r < L.VR; r++) {
     const [rx, rz] = rackPos(r);
     for (const y of [.06, .5, .95]) { const sh = new THREE.Mesh(gShelf, mShelf); sh.position.set(rx + .61, y, rz + .22); sh.castShadow = sh.receiveShadow = true; world.add(sh); }
-    { const lb = label('Стеллаж ' + (r + 1), false); own.push(lb.material, lb.material.map); lb.scale.multiplyScalar(.95); lb.position.set(rx + .61, 1.2, rz + .22); world.add(lb); } // номер — как в списке полок
+    { const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: rackTex('№' + (r + 1), '', false), depthTest: false})); sp.center.set(.5, 0); sp.renderOrder = 10; own.push(sp.material); sp.position.set(rx + .61, 1.5, rz + .22); world.add(sp); rackLb.push({sp, r, k: '', bp: sp.position.clone(), bare: false, hit: null}); } // табличка: номер как в списке полок, тап открывает карточку
     for (const [a, b] of [[0, 0], [1.2, 0], [0, .42], [1.2, .42]]) { const p = new THREE.Mesh(gPost, mMetal); p.position.set(rx + a + .01, .49, rz + b + .01); p.castShadow = true; world.add(p); }
   }
   buildPrinters();
@@ -1396,6 +1495,7 @@ R.domElement.addEventListener('pointermove', e => {
 const endPtr = e => {
   const d = drag; ptrs.delete(e.pointerId); if (ptrs.size) return; drag = null;
   if (!d || d.moved || e.type !== 'pointerup') return;
+  { const rr = rackAt(e.clientX, e.clientY); if (rr >= 0) { sound('tap'); haptic(); if (window.rkOpen) rkOpen(rr); return; } }
   const r = R.domElement.getBoundingClientRect(), ray = new THREE.Raycaster();
   ray.setFromCamera(new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), cam);
   const h = ray.intersectObjects(hits.concat(prHits), false)[0]; if (!h) return;
@@ -1563,7 +1663,7 @@ function frame() {
   if (T - fps.from > 5) { fps.n++; fps.t += dt; if (fps.t > 4) { const f = fps.n / fps.t; fps.bad = f < 24 ? fps.bad + 1 : 0;
     if (!S.eco && fps.bad >= 2 && !fps.warned) { fps.warned = 1; S.eco = 1; S.ecoAuto = 1; toast('🪫 Включил экономную графику — телефон не тянет тени. Вернуть можно во вкладке «Рост»'); } fps.n = 0; fps.t = 0; } }
   if (glLost) return;
-  try { placeCam(); R.render(scene, cam); } catch (e) { built = ''; } // сбой кадра — пересобрать сцену в следующем
+  try { placeCam(); rackLabels(); R.render(scene, cam); } catch (e) { built = ''; } // сбой кадра — пересобрать сцену в следующем
 }
 loadAssets().then(() => { ready = true; $('smsg').remove(); }).catch(e => { $('smsg').textContent = 'Не загрузилась 3D-графика: ' + e.message; });
 window.render3d = frame; // зовёт главный цикл game.js после тактов логики
