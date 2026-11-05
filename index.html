@@ -282,7 +282,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.21'; // номер версии подставляет release.sh
+const APPV='0.21.1'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=18; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -927,6 +927,7 @@ const A={
   imp:()=>{const n=impN(),c=impC();if(n<4&&S.money>=c){spend(c);S.imp++;sound('coin');toast('🔨 '+IMP[S.loc][n]+': +'+Math.round(IMP_B*100)+'% к цене навсегда')}},
   ns:()=>{S.ns=S.ns?0:1;toast(S.ns?'🌙 Ночная смена включена: ночью все работают, ночные часы ×2 к зарплате':'🌙 Ночная смена выключена: ночью люди дома')},
   rk:(v,el)=>{const r=+el.dataset.r;S.rk[r]=v===''?null:+v;toast('🗄 Стеллаж '+((r>>1)+1)+', '+(r%2?'верхняя':'нижняя')+' полка: '+(v===''?'основное изделие':'«'+PR[+v].n+'»')+' — со следующего стола')},
+  rkg:(v,el)=>{if(v==='~')return;const g=el.dataset.g,n=Math.ceil(Math.min(S.racks*6,Lc().max)/3),nv=v===''?null:+v;let c=0;for(let s=0;s<n;s++)if(g==='all'||prodOf(s*3)===+g){S.rk[s]=nv;c++}toast('🗄 '+c+' '+pl3(c,'полка','полки','полок')+': '+(nv==null?'основное изделие':'«'+PR[nv].n+'»')+' — со следующего стола')},
   dqc:i=>{const x=S.dq&&S.dq.q[+i];if(!x||x.cl||dqGot(x)<x.need)return;x.cl=1;const g=Math.max(500,S.rate*300);earn(g,1);S.gems+=3;sound('coin');toast('📅 Задание выполнено: +'+fm(g)+' и 💎 3');
     if(!S.dq.all&&S.dq.q.every(y=>y.cl)){S.dq.all=1;S.gems+=10;toast('🏆 Все задания дня — 💎 +10')}},
   game:k=>{if((S.gcd[k]||0)>0){toast('🎮 Эту игру можно снова через '+dur(S.gcd[k]));return}startGame(k)},
@@ -967,7 +968,7 @@ function shHtml(){
   if(SH.m==='list'){const rows=rkRows(),fl=['Все','Аварии','Есть место'];
     return `<div class="sh-h"><div class="grow"><b>Все стеллажи</b><div class="sub">${S.pr.length} из ${maxPr()} принтеров · ${S.racks} ${pl3(S.racks,'стеллаж','стеллажа','стеллажей')}</div></div><button class="sh-x" data-a="rkclose" aria-label="Закрыть">✕</button></div>
      <div class="sh-f">${fl.map((n,i)=>`<button class="${SHF===i?'on':''}" data-a="rkf" data-i="${i}">${n}</button>`).join('')}</div>
-     <div class="sh-b">${rows.length?rows.map(([r,b])=>`<button class="sh-r" data-a="rkopen" data-i="${r}"><span class="grow"><b>Стеллаж ${r+1}</b> <span class="sub">${rkN(r)}/${rkPlaces(r)} · </span>${rkState(r)}</span>${b?`<i class="bdg ${b==='!'?'e':'p'}">${b}</i>`:''}<span class="mu">›</span></button>`).join(''):'<div class="sub" style="padding:14px">Таких стеллажей нет.</div>'}</div>`}
+     <div class="sh-b">${rows.length?rows.map(([r,b])=>`<button class="sh-r" data-a="rkopen" data-i="${r}"><span class="grow"><b>Стеллаж ${r+1}</b> <span class="sub">${rkN(r)}/${rkPlaces(r)} · </span>${rkState(r)}<div class="sub">${[r*2,r*2+1].map(x=>icn(PR_IC[prodOf(x*3)],1)+PR[prodOf(x*3)].n).join(' · ')}</div></span>${b?`<i class="bdg ${b==='!'?'e':'p'}">${b}</i>`:''}<span class="mu">›</span></button>`).join(''):'<div class="sub" style="padding:14px">Таких стеллажей нет.</div>'}</div>`}
   const r=SH.r,n=rkN(r),pl=rkPlaces(r),opts=PR.map((x,i)=>S.unl[i]?i:-1).filter(i=>i>=0);
   const shelf=s=>{const v=S.rk[s],pid=prodOf(s*3);return `<div class="card row" style="margin:0 0 8px"><div class="grow"><div class="sub">${s%2?'Верхняя':'Нижняя'} полка · 3 принтера</div><b>${icn(PR_IC[pid],1)}${PR[pid].n}</b> <span class="sub">${v==null||!S.unl[v]?'(основное)':''}</span></div>${opts.length>1?`<label class="sh-ch">Изменить ›<select data-a="rk" data-r="${s}"><option value=""${v==null?' selected':''}>основное · ${P().n}</option>${opts.map(i=>`<option value="${i}"${v===i?' selected':''}>${PR[i].n}</option>`).join('')}</select></label>`:''}</div>`};
   const tech=MG[0],hasT=!!S.mg[tech.k];
@@ -994,10 +995,11 @@ function shRefresh(){if(!SH)return;if(SH.m==='rack'&&SH.r>=S.racks||tab!=='farm'
   const h=shHtml();if(h===SHh)return;const bd=c.querySelector('.sh-b'),st=bd?bd.scrollTop:0;SHh=h;c.innerHTML=h;const nb=c.querySelector('.sh-b');if(nb)nb.scrollTop=st}
 // стеллажи: у каждого своё изделие (или основное)
 function rackCard(){const opts=PR.map((x,i)=>S.unl[i]?i:-1).filter(i=>i>=0);if(opts.length<2)return'';
-  const n=Math.ceil(Math.min(S.racks*6,Lc().max)/3);
-  const rows=[...Array(n)].map((_,r)=>{const v=S.rk[r];return `<div class="row" style="margin-top:6px"><div class="grow">Стеллаж ${(r>>1)+1} · ${r%2?'верхняя':'нижняя'} полка</div><select data-a="rk" data-r="${r}" style="background:#1b2333;color:#fff;border:1px solid #2b3549;border-radius:8px;padding:6px;max-width:60%">
-    <option value=""${v==null?' selected':''}>основное · ${P().n}</option>${opts.map(i=>`<option value="${i}"${v===i?' selected':''}>${PR[i].n}</option>`).join('')}</select></div>`}).join('');
-  return `<details class="card"${S.racks<=2?' open':''}><summary><b>🗄 Полки — что печатать</b> <span class="sub">· на каждой полке 3 принтера, у каждой полки может быть своё изделие и свой заказ</span></summary>${rows}</details>`}
+  const n=Math.ceil(Math.min(S.racks*6,Lc().max)/3),g={};for(let s=0;s<n;s++){const p=prodOf(s*3);g[p]=(g[p]||0)+1}
+  const ks=Object.keys(g),st='background:#1b2333;color:#fff;border:1px solid #2b3549;border-radius:8px;padding:6px;max-width:48%';
+  const sel=(d,t)=>`<select data-a="rkg" ${d} style="${st}"><option value="~" selected>${t}</option><option value="">основное · ${P().n}</option>${opts.map(i=>`<option value="${i}">${PR[i].n}</option>`).join('')}</select>`;
+  const rows=ks.map(p=>`<div class="row" style="margin-top:6px"><div class="grow">${icn(PR_IC[p],1)}<b>${PR[p].n}</b> <span class="sub">· ${g[p]} ${pl3(g[p],'полка','полки','полок')}</span></div>${sel('data-g="'+p+'"','Поменять на…')}</div>`).join('');
+  return `<details class="card"${ks.length<=4?' open':''}><summary><b>🗄 Что печатают полки</b> <span class="sub">· ${n} ${pl3(n,'полка','полки','полок')}</span></summary><div class="row" style="margin-top:6px"><div class="grow">Всем полкам:</div>${sel('data-g="all"','выбрать…')}</div>${rows}<div class="sub" style="margin-top:6px;font-size:11px">Отдельную полку — тапни табличку стеллажа.</div></details>`}
 // ---------- мини-игры: короткие, по желанию, за бонус ----------
 function startGame(k){const box=document.createElement('div');box.className='modal';box.id='mg';document.body.appendChild(box);
   const end=(win,msg)=>{clearInterval(box._t);S.gcd[k]=300;box.innerHTML='<div class="card" style="text-align:center"><h3>'+(win?'🎉 ':'😕 ')+msg+'</h3><button class="btn" id="mgok">OK</button></div>';
