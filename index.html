@@ -282,7 +282,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.21.4'; // номер версии подставляет release.sh
+const APPV='0.21.5'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=19; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -1165,18 +1165,18 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 const wrap = $('scene');
-const R = new THREE.WebGLRenderer({antialias: true});
-R.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
-R.shadowMap.enabled = true;
-R.shadowMap.type = THREE.PCFSoftShadowMap;
-R.toneMapping = THREE.ACESFilmicToneMapping; R.toneMappingExposure = 1.25; // мягкий «кинотон» вместо плоского света
-wrap.prepend(R.domElement);
+const renderer = new THREE.WebGLRenderer({antialias: true});
+renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.25; // мягкий «кинотон» вместо плоского света
+wrap.prepend(renderer.domElement);
 let glLost = false; // iOS при сворачивании может отобрать WebGL — ждём возврата и пересобираем сцену
-R.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); glLost = true; });
-R.domElement.addEventListener('webglcontextrestored', () => { glLost = false; built = ''; });
+renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); glLost = true; });
+renderer.domElement.addEventListener('webglcontextrestored', () => { glLost = false; built = ''; });
 // вернулись в приложение, а графику так и не вернули — восстанавливаем сами
-document.addEventListener('visibilitychange', () => { if (document.hidden) return; setTimeout(() => { try { if (R.getContext().isContextLost()) R.forceContextRestore(); } catch (e) {} built = ''; }, 300);
-  setTimeout(() => { try { if (!document.hidden && R.getContext().isContextLost()) { save(); location.reload(); } } catch (e) {} }, 2300); }); // так и не вернули — сохраняемся и перезапускаем страницу
+document.addEventListener('visibilitychange', () => { if (document.hidden) return; setTimeout(() => { try { if (renderer.getContext().isContextLost()) renderer.forceContextRestore(); } catch (e) {} built = ''; }, 300);
+  setTimeout(() => { try { if (!document.hidden && renderer.getContext().isContextLost()) { save(); location.reload(); } } catch (e) {} }, 2300); }); // так и не вернули — сохраняемся и перезапускаем страницу
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#0b0f16');
 const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 200);
@@ -1233,7 +1233,7 @@ function label(text, hot) {
 }
 function setLabel(s, text, hot, blink) {
   s.material.opacity = hot && blink === false ? .45 : 1;
-  const k = text + hot; if (s.userData.k === k || T - (s.userData.t || -9) < .25) return; s.userData.k = k; s.userData.t = T;
+  const k = text + hot; if (s.userData.k === k || sceneTime - (s.userData.t || -9) < .25) return; s.userData.k = k; s.userData.t = sceneTime;
   const n = label(text, hot); s.material.map.dispose(); s.material.map = n.material.map; s.material.needsUpdate = true; n.material.dispose();
 }
 
@@ -1275,7 +1275,7 @@ function rackLabels() {
 }
 // тап по табличке: зона не меньше 44 px; возвращает номер стеллажа или -1
 function rackAt(cx, cy) {
-  const r = R.domElement.getBoundingClientRect(); let best = -1, bd = 1e9;
+  const r = renderer.domElement.getBoundingClientRect(); let best = -1, bd = 1e9;
   for (const o of rackLb) { if (!o.hit || !o.sp.visible) continue;
     const x = cx - r.left - o.hit.sx, y = cy - r.top - (o.hit.sy - RK_H / 2), hw = Math.max(o.hit.w, 44) / 2, hh = 22;
     if (Math.abs(x) <= hw && Math.abs(y) <= hh && Math.abs(x) + Math.abs(y) < bd) { bd = Math.abs(x) + Math.abs(y); best = o.r; } }
@@ -1359,15 +1359,22 @@ function person(k) {
   o.traverse(m => { if (m.isMesh) m.castShadow = false; });
   p.play('idle'); world.add(o); return p;
 }
+function disposePerson(p) {
+  p.mix.stopAllAction(); p.mix.uncacheRoot(p.o);
+  const skeletons = new Set();
+  p.o.traverse(o => { if (o.isSkinnedMesh) skeletons.add(o.skeleton); });
+  for (const skeleton of skeletons) skeleton.dispose();
+  p.o.removeFromParent(); if (p.ring) p.ring.g.removeFromParent();
+}
 
 // ---------- сборка мира ----------
-let rackLb = [], trashG = [], clients = [], lampL = null, lampB = null, arm = null, spools = [], cat = null, board = null, wclock = null, wins = [], puffs = [], coffeeAt = null, LS = 1, conv = [], world = null, L = null, built = '', printers = [], hits = [], van2 = null, people = {}, zones = {}, van = null, drone = null, server = null, flo = [];
+let rackLb = [], trashG = [], clients = [], lampL = null, lampB = null, arm = null, spools = [], cat = null, board = null, wclock = null, wins = [], puffs = [], coffeeAt = null, LS = 1, conv = [], world = null, layout = null, built = '', printers = [], hits = [], van2 = null, people = {}, zones = {}, van = null, drone = null, server = null, flo = [];
 const rackPos = rp; // раскладка общая с логикой: lay() и rp() из основного скрипта
 let prG = null, prHits = [], prKey = '';
 function buildPrinters() {
   if (prG) { world.remove(prG); prG.traverse(o => { if (o.isSprite) o.material.dispose(); }); }
   prG = new THREE.Group(); world.add(prG); printers = []; prHits = [];
-  for (let r = 0; r < L.VR; r++) { const [rx, rz] = rackPos(r);
+  for (let r = 0; r < layout.VR; r++) { const [rx, rz] = rackPos(r);
     for (let j = 0; j < 6; j++) {
       const i = r * 6 + j, x = S.pr[i]; if (!x) continue;
       const v = mkPrinter(x.t, (S.up.ams || 0) > 0, SPOOL[(x.pi != null ? x.pi : S.prod) % SPOOL.length]); v.g.position.set(rx + .22 + (j % 3) * .39, j < 3 ? .075 : .515, rz + .22);
@@ -1376,110 +1383,116 @@ function buildPrinters() {
     } }
   sun.shadow.needsUpdate = true;
 }
-let own = []; // текстуры и материалы этой сборки — освобождаем при следующей
+let own = []; // только материалы с собственными картами; общие ресурсы Kenney/кэшей сюда не входят
 const geoSet = () => { const s = new Set(); if (world) world.traverse(o => { if (o.geometry) s.add(o.geometry); }); return s; };
 const freeGeo = old => { for (const g of geoSet()) old.delete(g); for (const g of old) if (![...CG.values()].includes(g)) g.dispose(); }; // пол, стены и пр. новой сборки — новые объекты
 function build() {
-  for (const o of own) o.dispose(); own = []; for (const o of rackLb) o.sp.material.map.dispose(); rackLb = [];
+  // Карты подписей, часов и доски меняются в кадре — берём текущие у владельцев.
+  const maps = new Set(own.map(m => m.map).filter(Boolean));
+  for (const f of flo) { maps.add(f.s.material.map); f.s.material.dispose(); }
+  for (const map of maps) map.dispose();
+  for (const m of own) m.dispose(); own = []; rackLb = [];
+  for (const f of puffs) f.m.material.dispose(); // puffTex — общая текстура
+  for (const p of new Set([...Object.values(people).flat(), ...clients.map(c => c.p)])) disposePerson(p);
   if (world) scene.remove(world);
-  world = new THREE.Group(); scene.add(world); L = lay(); prG = null; LS = Math.max(1, Math.max(L.W, L.H) / 7); printers = []; hits = []; people = {}; flo = []; conv = [];
-  R.shadowMap.enabled = !S.eco; R.setPixelRatio(S.eco ? 1 : Math.min(1.5, window.devicePixelRatio || 1)); sun.castShadow = !S.eco;
+  world = new THREE.Group(); scene.add(world); layout = lay(); prG = null; LS = Math.max(1, Math.max(layout.W, layout.H) / 7); printers = []; hits = []; people = {}; flo = []; conv = [];
+  renderer.shadowMap.enabled = !S.eco; renderer.setPixelRatio(S.eco ? 1 : Math.min(1.5, window.devicePixelRatio || 1)); sun.castShadow = !S.eco;
   const th = THEME[TH()];
   // пол: плитка, у фургона асфальт
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(L.W, L.H), new THREE.MeshLambertMaterial({map: canvasTex(512, 512, (g, w, h) => {
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(layout.W, layout.H), new THREE.MeshLambertMaterial({map: canvasTex(512, 512, (g, w, h) => {
     const n = 16; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { g.fillStyle = (i + j) % 2 ? th.f1 : th.f2; g.fillRect(i * w / n, j * h / n, w / n + 1, h / n + 1); }
   })}));
-  { const ft = imgTex(FLOOR[TH()], L.W / 2, L.H / 2); if (ft) { floor.material.map.dispose(); floor.material.map = ft; } }
-  own.push(floor.material, floor.material.map); if (!ARTX[FLOOR[TH()]]) floor.material.map.repeat.set(L.W / 4, L.H / 4); floor.material.map.wrapS = floor.material.map.wrapT = THREE.RepeatWrapping;
-  floor.rotation.x = -Math.PI / 2; floor.position.set(L.W / 2, 0, L.H / 2); floor.receiveShadow = true; world.add(floor);
-  const asph = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 2.1), M('#2b2f36')); asph.rotation.x = -Math.PI / 2; asph.position.set(L.dock + .85, .005, L.z0 + 1.7); asph.receiveShadow = true; world.add(asph);
-  for (let i = 0; i < 3; i++) { const ln = new THREE.Mesh(new THREE.PlaneGeometry(.05, .8), MB('#e8e8e8')); ln.rotation.x = -Math.PI / 2; ln.position.set(L.dock - .1 + (i ? 1.9 : 0), .01, L.z0 + 1.7); if (i < 2) world.add(ln); }
+  { const ft = imgTex(FLOOR[TH()], layout.W / 2, layout.H / 2); if (ft) { floor.material.map.dispose(); floor.material.map = ft; } }
+  own.push(floor.material); if (!ARTX[FLOOR[TH()]]) floor.material.map.repeat.set(layout.W / 4, layout.H / 4); floor.material.map.wrapS = floor.material.map.wrapT = THREE.RepeatWrapping;
+  floor.rotation.x = -Math.PI / 2; floor.position.set(layout.W / 2, 0, layout.H / 2); floor.receiveShadow = true; world.add(floor);
+  const asph = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 2.1), M('#2b2f36')); asph.rotation.x = -Math.PI / 2; asph.position.set(layout.dock + .85, .005, layout.z0 + 1.7); asph.receiveShadow = true; world.add(asph);
+  for (let i = 0; i < 3; i++) { const ln = new THREE.Mesh(new THREE.PlaneGeometry(.05, .8), MB('#e8e8e8')); ln.rotation.x = -Math.PI / 2; ln.position.set(layout.dock - .1 + (i ? 1.9 : 0), .01, layout.z0 + 1.7); if (i < 2) world.add(ln); }
   // стены с оранжевой полосой и вывеской
   let wm = M(th.w);
-  { const wt = imgTex(WALL[TH()], L.W / 1.5, .65); if (wt) { wm = new THREE.MeshLambertMaterial({map: wt}); own.push(wm, wt); } }
-  const w1 = new THREE.Mesh(G(L.W, .95, .08), wm); w1.position.set(L.W / 2, .475, -.04);
-  const w2 = new THREE.Mesh(G(.08, .95, L.H), wm); w2.position.set(-.04, .475, L.H / 2);
-  const s1 = new THREE.Mesh(G(L.W, .07, .09), mOrange); s1.position.set(L.W / 2, .9, -.04);
-  const s2 = new THREE.Mesh(G(.09, .07, L.H), mOrange); s2.position.set(-.04, .9, L.H / 2);
+  { const wt = imgTex(WALL[TH()], layout.W / 1.5, .65); if (wt) { wm = new THREE.MeshLambertMaterial({map: wt}); own.push(wm); } }
+  const w1 = new THREE.Mesh(G(layout.W, .95, .08), wm); w1.position.set(layout.W / 2, .475, -.04);
+  const w2 = new THREE.Mesh(G(.08, .95, layout.H), wm); w2.position.set(-.04, .475, layout.H / 2);
+  const s1 = new THREE.Mesh(G(layout.W, .07, .09), mOrange); s1.position.set(layout.W / 2, .9, -.04);
+  const s2 = new THREE.Mesh(G(.09, .07, layout.H), mOrange); s2.position.set(-.04, .9, layout.H / 2);
   for (const o of [w1, w2]) { o.receiveShadow = true; }
   world.add(w1, w2, s1, s2);
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.6, .4), new THREE.MeshBasicMaterial({transparent: true, map: canvasTex(512, 128, (g) => {
     g.fillStyle = '#ff8a1f'; g.font = '900 96px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('PRINTLS', 256, 68);
   })}));
-  sign.position.set(L.W / 2, .55, .005); world.add(sign); own.push(sign.material, sign.material.map);
+  sign.position.set(layout.W / 2, .55, .005); world.add(sign); own.push(sign.material);
   // постеры на дальней стене слева от вывески: в гараже один, дальше больше
   if (ARTX.poster_brand) for (let i = 0; i < Math.min(4, 1 + TH()); i++) {
     const pt = posterTex(...POSTERS[i]), pm = new THREE.MeshBasicMaterial({map: pt}), ps = new THREE.Mesh(new THREE.PlaneGeometry(.4, .5), pm);
-    ps.position.set(.45 + i * .5, .5, .006); world.add(ps); own.push(pm, pt);
+    ps.position.set(.45 + i * .5, .5, .006); world.add(ps); own.push(pm);
   }
-  const plant = prop('plant', 1.2); plant.position.set(.15, 0, L.hz + .1); world.add(plant);
-  if (TH() === 0) { const gd = new THREE.Mesh(G(1.1, .7, .02), M('#9aa3ad')); gd.position.set(L.W * .22, .35, .005); world.add(gd);
-    for (let i = 0; i < 6; i++) { const l = new THREE.Mesh(G(1.1, .012, .025), M('#7d858f')); l.position.set(L.W * .22, .08 + i * .11, .02); world.add(l); } }
-  if (TH() === 1) { const so = prop('sofa', 1.1); so.position.set(L.W - .7, 0, L.hz - .2); so.rotation.y = -Math.PI / 2; world.add(so); const p2 = prop('plant', 1.2); p2.position.set(L.W - .25, 0, L.hz + .35); world.add(p2); }
-  if (TH() >= 2) for (let c = 0; c <= L.cols; c++) { const ln = new THREE.Mesh(new THREE.PlaneGeometry(.04, L.hz), MB('#f5c518')); ln.rotation.x = -Math.PI / 2; ln.position.set(.32 + c * 1.9 - (c ? .2 : 0), .006, L.hz / 2 + .2); world.add(ln); }
-  if (TH() === 3) { const n = Math.max(2, Math.round((L.z0 - .8) / .5)); for (let i = 0; i < n; i++) { const c = fit('conv', .55); c.rotation.y = Math.PI / 2; c.position.set(L.W - .25, 0, .8 + (i + .5) * (L.z0 - .8) / n); world.add(c); }
-    for (let i = 0; i < 6; i++) { const b = prop('box', .7); b.traverse(m => { if (m.isMesh) m.castShadow = false; }); b.position.set(L.W - .25, .12, .8 + i * (L.z0 - .8) / 6); world.add(b); conv.push(b); } }
+  const plant = prop('plant', 1.2); plant.position.set(.15, 0, layout.hz + .1); world.add(plant);
+  if (TH() === 0) { const gd = new THREE.Mesh(G(1.1, .7, .02), M('#9aa3ad')); gd.position.set(layout.W * .22, .35, .005); world.add(gd);
+    for (let i = 0; i < 6; i++) { const l = new THREE.Mesh(G(1.1, .012, .025), M('#7d858f')); l.position.set(layout.W * .22, .08 + i * .11, .02); world.add(l); } }
+  if (TH() === 1) { const so = prop('sofa', 1.1); so.position.set(layout.W - .7, 0, layout.hz - .2); so.rotation.y = -Math.PI / 2; world.add(so); const p2 = prop('plant', 1.2); p2.position.set(layout.W - .25, 0, layout.hz + .35); world.add(p2); }
+  if (TH() >= 2) for (let c = 0; c <= layout.cols; c++) { const ln = new THREE.Mesh(new THREE.PlaneGeometry(.04, layout.hz), MB('#f5c518')); ln.rotation.x = -Math.PI / 2; ln.position.set(.32 + c * 1.9 - (c ? .2 : 0), .006, layout.hz / 2 + .2); world.add(ln); }
+  if (TH() === 3) { const n = Math.max(2, Math.round((layout.z0 - .8) / .5)); for (let i = 0; i < n; i++) { const c = fit('conv', .55); c.rotation.y = Math.PI / 2; c.position.set(layout.W - .25, 0, .8 + (i + .5) * (layout.z0 - .8) / n); world.add(c); }
+    for (let i = 0; i < 6; i++) { const b = prop('box', .7); b.traverse(m => { if (m.isMesh) m.castShadow = false; }); b.position.set(layout.W - .25, .12, .8 + i * (layout.z0 - .8) / 6); world.add(b); conv.push(b); } }
   // уголок инженера: стол, монитор, кресло
-  const desk = prop('desk', 1.1); desk.position.set(L.W - .95, 0, .05); world.add(desk);
-  const scr = prop('screen', 1.1); scr.position.set(L.W - .85, .42, .12); world.add(scr);
-  const ch = prop('chair', 1.1); ch.position.set(L.W - .8, 0, .55); ch.rotation.y = Math.PI; world.add(ch);
+  const desk = prop('desk', 1.1); desk.position.set(layout.W - .95, 0, .05); world.add(desk);
+  const scr = prop('screen', 1.1); scr.position.set(layout.W - .85, .42, .12); world.add(scr);
+  const ch = prop('chair', 1.1); ch.position.set(layout.W - .8, 0, .55); ch.rotation.y = Math.PI; world.add(ch);
   // обстановка: у каждой площадки свой характер
   const put = (o, x, z, ry = 0, y = 0) => { o.position.set(x, y, z); o.rotation.y = ry; world.add(o); return o; };
-  put(fit('boxopen', .32), L.dock + 1.75, L.z0 + .45, .4); put(fit('trash', .22), L.dock + 1.8, L.z0 + .05);
-  if (TH() === 0) put(fit('shelfb', .62), L.W - .3, L.hz - .1, -Math.PI / 2);                       // гараж: стеллаж с катушками и хламом
-  if (TH() >= 1) { put(fit('rug', .9), L.W - .95, .55, 0, .004); put(fit('lamp', .55), L.W - .2, .25); }   // комната и дальше: ковёр, торшер
-  if (TH() >= 1) put(fit('coffee', .14), L.W - 1.2, .14, 0, .37);                                      // кофемашина на столе
-  if (TH() >= 2) { put(fit('hscr', .9), L.pack + .57, L.z0 + .32, 0, 1.15); put(fit('tv', .45), L.W - .55, .06, 0, .52); } // экраны с заказами
-  if (S.loc >= OTK_LV) put(fit('scan', .36), L.otk + 1.55, L.z0 + .3);                                  // сканер ОТК
-  if (S.loc >= POST_LV) put(fit('mach', .5), L.otk + .57, L.post + 1.15);                            // станок постобработки — за её столом, у стены (рядом склад у ворот)
-  arm = null; if (TH() === 3) arm = put(fit('arm', .7), L.pack + 1.35, L.z0 + .32);                     // робот-упаковщик
+  put(fit('boxopen', .32), layout.dock + 1.75, layout.z0 + .45, .4); put(fit('trash', .22), layout.dock + 1.8, layout.z0 + .05);
+  if (TH() === 0) put(fit('shelfb', .62), layout.W - .3, layout.hz - .1, -Math.PI / 2);                       // гараж: стеллаж с катушками и хламом
+  if (TH() >= 1) { put(fit('rug', .9), layout.W - .95, .55, 0, .004); put(fit('lamp', .55), layout.W - .2, .25); }   // комната и дальше: ковёр, торшер
+  if (TH() >= 1) put(fit('coffee', .14), layout.W - 1.2, .14, 0, .37);                                      // кофемашина на столе
+  if (TH() >= 2) { put(fit('hscr', .9), layout.pack + .57, layout.z0 + .32, 0, 1.15); put(fit('tv', .45), layout.W - .55, .06, 0, .52); } // экраны с заказами
+  if (S.loc >= OTK_LV) put(fit('scan', .36), layout.otk + 1.55, layout.z0 + .3);                                  // сканер ОТК
+  if (S.loc >= POST_LV) put(fit('mach', .5), layout.otk + .57, layout.post + 1.15);                            // станок постобработки — за её столом, у стены (рядом склад у ворот)
+  arm = null; if (TH() === 3) arm = put(fit('arm', .7), layout.pack + 1.35, layout.z0 + .32);                     // робот-упаковщик
   // стена катушек: столько катушек, сколько килограммов пластика на складе (до 24)
-  spools = []; { const x = L.W - .14, z1 = 1.0, z2 = Math.min(L.hz - .2, 3.2), sh = new THREE.Mesh(G(.2, .02, z2 - z1 + .1), mShelf);
+  spools = []; { const x = layout.W - .14, z1 = 1.0, z2 = Math.min(layout.hz - .2, 3.2), sh = new THREE.Mesh(G(.2, .02, z2 - z1 + .1), mShelf);
     for (const y of [.25, .55, .85]) { const s2 = sh.clone(); s2.position.set(x, y, (z1 + z2) / 2); world.add(s2); }
     for (let i = 0; i < 24; i++) { const row = i / 8 | 0, col = i % 8, m = new THREE.Mesh(gSpool, SPOOL[(i * 3) % SPOOL.length]); m.rotation.y = Math.PI / 2;
       m.position.set(x, .32 + row * .3, z1 + .05 + col * (z2 - z1) / 8); m.castShadow = true; world.add(m); spools.push(m); } }
   // верстак: запчасти, сушилка пластика, инструмент
-  { const bx = L.W - .55, bz = L.z0 - .25, top = new THREE.Mesh(G(.7, .04, .32), M('#8a6a4a')); top.position.set(bx, .4, bz); top.castShadow = true; world.add(top);
+  { const bx = layout.W - .55, bz = layout.z0 - .25, top = new THREE.Mesh(G(.7, .04, .32), M('#8a6a4a')); top.position.set(bx, .4, bz); top.castShadow = true; world.add(top);
     for (const [a, b] of [[-.32, -.13], [.32, -.13], [-.32, .13], [.32, .13]]) { const l = new THREE.Mesh(G(.03, .4, .03), mMetal); l.position.set(bx + a, .2, bz + b); world.add(l); }
     const dry = new THREE.Mesh(G(.16, .14, .16), M('#e9ecef')); dry.position.set(bx - .2, .49, bz); world.add(dry);                      // сушилка
     const dsp = new THREE.Mesh(G(.06, .03, .005), MB('#2ecc71')); dsp.position.set(bx - .2, .5, bz + .082); world.add(dsp);
     const bin = new THREE.Mesh(G(.2, .08, .14), M('#ff8a1f')); bin.position.set(bx + .12, .46, bz); world.add(bin);                   // ящик запчастей
     for (let i = 0; i < 3; i++) { const t = new THREE.Mesh(G(.012, .012, .12), M('#3a3f47')); t.position.set(bx + .3, .43, bz - .05 + i * .05); world.add(t); } }
   // доска заказов со стикерами и часы — на задней стене
-  board = new THREE.Mesh(new THREE.PlaneGeometry(.9, .5), new THREE.MeshBasicMaterial({map: canvasTex(256, 144, () => {})})); board.position.set(Math.max(1.2, L.W - 2.1), .5, .006); world.add(board); own.push(board.material, board.material.map); board.userData.k = '';
-  wclock = new THREE.Mesh(new THREE.CircleGeometry(.14, 24), new THREE.MeshBasicMaterial({map: canvasTex(96, 96, () => {})})); wclock.position.set(Math.max(1.2, L.W - 2.1) + .65, .6, .006); world.add(wclock); own.push(wclock.material, wclock.material.map); wclock.userData.k = '';
+  board = new THREE.Mesh(new THREE.PlaneGeometry(.9, .5), new THREE.MeshBasicMaterial({map: canvasTex(256, 144, () => {})})); board.position.set(Math.max(1.2, layout.W - 2.1), .5, .006); world.add(board); own.push(board.material); board.userData.k = '';
+  wclock = new THREE.Mesh(new THREE.CircleGeometry(.14, 24), new THREE.MeshBasicMaterial({map: canvasTex(96, 96, () => {})})); wclock.position.set(Math.max(1.2, layout.W - 2.1) + .65, .6, .006); world.add(wclock); own.push(wclock.material); wclock.userData.k = '';
   // окна на левой стене: днём светятся, ночью тёмные
-  wins = []; for (let z = 1.2; z < L.hz; z += 1.6) { const w = new THREE.Mesh(new THREE.PlaneGeometry(.6, .4), MB('#bfe3ff').clone()); w.rotation.y = Math.PI / 2; w.position.set(.006, .55, z); world.add(w); wins.push(w); own.push(w.material); }
+  wins = []; for (let z = 1.2; z < layout.hz; z += 1.6) { const w = new THREE.Mesh(new THREE.PlaneGeometry(.6, .4), MB('#bfe3ff').clone()); w.rotation.y = Math.PI / 2; w.position.set(.006, .55, z); world.add(w); wins.push(w); own.push(w.material); }
   // разметка отгрузки на полу
   { const t = new THREE.Mesh(new THREE.PlaneGeometry(1.4, .3), new THREE.MeshBasicMaterial({transparent: true, map: canvasTex(512, 110, g => { g.strokeStyle = '#f5c518'; g.lineWidth = 8; g.strokeRect(6, 6, 500, 98); g.fillStyle = '#f5c518'; g.font = '900 64px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('ОТГРУЗКА', 256, 58); })}));
-    t.rotation.x = -Math.PI / 2; t.position.set(L.dock + .65, .008, L.z0 + .75); world.add(t); own.push(t.material, t.material.map); }
+    t.rotation.x = -Math.PI / 2; t.position.set(layout.dock + .65, .008, layout.z0 + .75); world.add(t); own.push(t.material); }
   // кот — талисман фермы: спит на коробках, иногда гуляет
-  cat = mkCat(); cat.g.position.set(L.dock + 1.75, .32, L.z0 + .45); world.add(cat.g); cat.home = [L.dock + 1.75, L.z0 + .45]; cat.y0 = .32;
-  coffeeAt = TH() >= 1 ? new THREE.Vector3(L.W - 1.2, .55, .14) : null; puffs = [];
+  cat = mkCat(); cat.g.position.set(layout.dock + 1.75, .32, layout.z0 + .45); world.add(cat.g); cat.home = [layout.dock + 1.75, layout.z0 + .45]; cat.y0 = .32;
+  coffeeAt = TH() >= 1 ? new THREE.Vector3(layout.W - 1.2, .55, .14) : null; puffs = [];
   // ---------- улица: двор с травой и забором у гаража, асфальт и парковка у больших площадок ----------
-  { const out = new THREE.Mesh(new THREE.PlaneGeometry(L.W + 14, L.H + 14), M(TH() <= 1 ? '#4d7a3e' : '#3a3e45')); out.rotation.x = -Math.PI / 2; out.position.set(L.W / 2 + 3, -.01, L.H / 2 + 3); out.receiveShadow = true; world.add(out);
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(14, 1.6), M('#2b2f36')); road.rotation.x = -Math.PI / 2; road.position.set(L.dock + 6, -.005, L.z0 + 1.7); world.add(road);
-    if (TH() <= 1) { for (let x = -.2; x < L.W + 3; x += .5) { const pz = new THREE.Mesh(G(.05, .35, .05), M('#8a6a4a')); pz.position.set(x, .17, L.H + .9); world.add(pz); }
-      const rail = new THREE.Mesh(G(L.W + 3.2, .04, .03), M('#8a6a4a')); rail.position.set(L.W / 2 + 1.4, .28, L.H + .9); world.add(rail); }
-    else for (let i = 0; i < 4; i++) { const ln = new THREE.Mesh(new THREE.PlaneGeometry(.05, .9), MB('#e8e8e8')); ln.rotation.x = -Math.PI / 2; ln.position.set(L.W + .8 + i * .75, -.004, L.H - .2); world.add(ln); }
+  { const out = new THREE.Mesh(new THREE.PlaneGeometry(layout.W + 14, layout.H + 14), M(TH() <= 1 ? '#4d7a3e' : '#3a3e45')); out.rotation.x = -Math.PI / 2; out.position.set(layout.W / 2 + 3, -.01, layout.H / 2 + 3); out.receiveShadow = true; world.add(out);
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(14, 1.6), M('#2b2f36')); road.rotation.x = -Math.PI / 2; road.position.set(layout.dock + 6, -.005, layout.z0 + 1.7); world.add(road);
+    if (TH() <= 1) { for (let x = -.2; x < layout.W + 3; x += .5) { const pz = new THREE.Mesh(G(.05, .35, .05), M('#8a6a4a')); pz.position.set(x, .17, layout.H + .9); world.add(pz); }
+      const rail = new THREE.Mesh(G(layout.W + 3.2, .04, .03), M('#8a6a4a')); rail.position.set(layout.W / 2 + 1.4, .28, layout.H + .9); world.add(rail); }
+    else for (let i = 0; i < 4; i++) { const ln = new THREE.Mesh(new THREE.PlaneGeometry(.05, .9), MB('#e8e8e8')); ln.rotation.x = -Math.PI / 2; ln.position.set(layout.W + .8 + i * .75, -.004, layout.H - .2); world.add(ln); }
     const tree = (x, z, k) => { const tr = new THREE.Mesh(new THREE.CylinderGeometry(.05 * k, .07 * k, .5 * k, 8), M('#6b4a2e')); tr.position.set(x, .25 * k, z); tr.castShadow = true; world.add(tr);
       const cr = new THREE.Mesh(new THREE.IcosahedronGeometry(.35 * k, 0), M('#3f8a3a')); cr.position.set(x, .7 * k, z); cr.castShadow = true; world.add(cr); };
-    tree(L.W + 1.3, .8, 1.2); tree(L.W + 2.2, 2.0, 1); tree(L.W + 1.6, L.H + .4, 1.3); tree(1.0, L.H + 1.5, 1.1);
-    put(fit('sedan', .95), L.W + 1.15, L.H - .45, Math.PI / 2);                                          // машина у входа
-    if (TH() >= 2) for (let i = 0; i < 3; i++) put(fit('cone', .16), L.dock + 1.9 + i * .25, L.z0 + 2.55);
-    const pole = new THREE.Mesh(G(.05, 1.3, .05), M('#3a3f47')); pole.position.set(L.W + .35, .65, L.z0 + .9); world.add(pole);   // фонарь
-    lampB = new THREE.Mesh(new THREE.SphereGeometry(.08, 12, 8), MB('#fff3c4').clone()); lampB.position.set(L.W + .35, 1.32, L.z0 + .9); world.add(lampB); own.push(lampB.material);
-    lampL = new THREE.PointLight('#ffd89a', 0, 4); lampL.position.set(L.W + .35, 1.2, L.z0 + .9); world.add(lampL);
-    const sp = new THREE.Mesh(G(.06, .9, .06), M('#3a3f47')); sp.position.set(L.dock + 2.5, .45, L.z0 + 2.75); world.add(sp);  // вывеска на столбе
+    tree(layout.W + 1.3, .8, 1.2); tree(layout.W + 2.2, 2.0, 1); tree(layout.W + 1.6, layout.H + .4, 1.3); tree(1.0, layout.H + 1.5, 1.1);
+    put(fit('sedan', .95), layout.W + 1.15, layout.H - .45, Math.PI / 2);                                          // машина у входа
+    if (TH() >= 2) for (let i = 0; i < 3; i++) put(fit('cone', .16), layout.dock + 1.9 + i * .25, layout.z0 + 2.55);
+    const pole = new THREE.Mesh(G(.05, 1.3, .05), M('#3a3f47')); pole.position.set(layout.W + .35, .65, layout.z0 + .9); world.add(pole);   // фонарь
+    lampB = new THREE.Mesh(new THREE.SphereGeometry(.08, 12, 8), MB('#fff3c4').clone()); lampB.position.set(layout.W + .35, 1.32, layout.z0 + .9); world.add(lampB); own.push(lampB.material);
+    lampL = new THREE.PointLight('#ffd89a', 0, 4); lampL.position.set(layout.W + .35, 1.2, layout.z0 + .9); world.add(lampL);
+    const sp = new THREE.Mesh(G(.06, .9, .06), M('#3a3f47')); sp.position.set(layout.dock + 2.5, .45, layout.z0 + 2.75); world.add(sp);  // вывеска на столбе
     const sg = new THREE.Mesh(new THREE.PlaneGeometry(1.1, .32), new THREE.MeshBasicMaterial({map: canvasTex(512, 150, g => { g.fillStyle = '#ff8a1f'; g.fillRect(0, 0, 512, 150); g.fillStyle = '#15100a'; g.font = '900 96px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('PRINTLS', 256, 70); g.font = 'bold 26px system-ui'; g.fillText('3D-ПЕЧАТЬ', 256, 128); })}));
-    sg.position.set(L.dock + 2.5, 1.0, L.z0 + 2.78); world.add(sg); own.push(sg.material, sg.material.map); }
+    sg.position.set(layout.dock + 2.5, 1.0, layout.z0 + 2.78); world.add(sg); own.push(sg.material); }
   // ---------- куча мусора у упаковки: тап — прибраться ----------
-  trashG = []; { const tx = L.pack + 1.3, tz = L.z0 + .95; for (let i = 0; i < 12; i++) { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(.07, 0), M('#2f4a33')); b.scale.y = .8;
+  trashG = []; { const tx = layout.pack + 1.3, tz = layout.z0 + .95; for (let i = 0; i < 12; i++) { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(.07, 0), M('#2f4a33')); b.scale.y = .8;
       b.position.set(tx + (i % 4) * .1 - .15, .06 + (i / 4 | 0) * .09, tz + ((i * 7) % 3) * .08 - .08); b.visible = false; world.add(b); trashG.push(b); }
     const th = new THREE.Mesh(G(.6, .4, .4), new THREE.MeshBasicMaterial({visible: false})); th.position.set(tx, .2, tz); th.userData.zone = 'trash'; world.add(th); hits.push(th); }
   clients = [];
   // стеллажи и принтеры
-  for (let r = 0; r < L.VR; r++) {
+  for (let r = 0; r < layout.VR; r++) {
     const [rx, rz] = rackPos(r);
     for (const y of [.06, .5, .95]) { const sh = new THREE.Mesh(gShelf, mShelf); sh.position.set(rx + .61, y, rz + .22); sh.castShadow = sh.receiveShadow = true; world.add(sh); }
     { const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: rackTex('№' + (r + 1), '', false), depthTest: false})); sp.center.set(.5, 0); sp.renderOrder = 10; own.push(sp.material); sp.position.set(rx + .61, 1.5, rz + .22); world.add(sp); rackLb.push({sp, r, k: '', bp: sp.position.clone(), bare: false, hit: null}); } // табличка: номер как в списке полок, тап открывает карточку
@@ -1498,19 +1511,19 @@ function build() {
     const lb = label('', false); own.push(lb.material); lb.position.set(x + .57, 1.0, z + .32); world.add(lb);
     zones[k] = {stack, lb, x, z};
   };
-  if (S.loc >= OTK_LV) mkZone(0, L.otk, L.z0, 'tray'); mkZone(1, L.pack, L.z0, 'box');
-  if (S.loc >= POST_LV) mkZone(3, L.otk, L.post, 'tray');
-  van = mkVan(); van.g.position.set(L.dock, 0, L.z0 + 1.65); world.add(van.g);
-  van2 = mkVan(); van2.g.position.set(L.dock, 0, L.z0 + 2.3); van2.g.visible = false; world.add(van2.g); // фургон №2 — вторая полоса дороги
+  if (S.loc >= OTK_LV) mkZone(0, layout.otk, layout.z0, 'tray'); mkZone(1, layout.pack, layout.z0, 'box');
+  if (S.loc >= POST_LV) mkZone(3, layout.otk, layout.post, 'tray');
+  van = mkVan(); van.g.position.set(layout.dock, 0, layout.z0 + 1.65); world.add(van.g);
+  van2 = mkVan(); van2.g.position.set(layout.dock, 0, layout.z0 + 2.3); van2.g.visible = false; world.add(van2.g); // фургон №2 — вторая полоса дороги
   const vh = new THREE.Mesh(G(1.5, .9, .8), new THREE.MeshBasicMaterial({visible: false})); vh.userData.zone = 2; van.g.add(vh); vh.position.set(.6, .4, 0); hits.push(vh);
   zones[2] = {lb: label('', false)}; own.push(zones[2].lb.material); zones[2].lb.position.set(.75, 1.3, 0); van.g.add(zones[2].lb); // подпись фургона — ЕГО груз, едет с ним
   // склад у ворот: паллета, куда упаковщик кладёт коробки (S.q.ship); подпись стоит на месте
-  const px = L.sDock[0] - .38, pz = L.sDock[1] + .02, pal = new THREE.Group(); pal.position.set(px, 0, pz); world.add(pal);
+  const px = layout.sDock[0] - .38, pz = layout.sDock[1] + .02, pal = new THREE.Group(); pal.position.set(px, 0, pz); world.add(pal);
   const pb = new THREE.Mesh(G(.5, .07, .42), M('#b0834f')); pb.position.y = .035; pb.receiveShadow = true; pal.add(pb);
   const dstack = []; for (let i = 0; i < 12; i++) { const b = prop('box', .62); b.traverse(m => { if (m.isMesh) m.castShadow = false; });
     b.position.set(-.16 + (i % 3) * .16, .07 + (i / 6 | 0) * .15, (i / 3 | 0) % 2 ? .1 : -.1); b.visible = false; pal.add(b); dstack.push(b); }
   const dlb = label('', false); own.push(dlb.material); dlb.position.set(px, .8, pz); world.add(dlb);
-  const glb = label('', false); own.push(glb.material); glb.position.set(L.W - .35, .7, L.z0 + 2.25); world.add(glb); // «🚚 N в пути» у выезда
+  const glb = label('', false); own.push(glb.material); glb.position.set(layout.W - .35, .7, layout.z0 + 2.25); world.add(glb); // «🚚 N в пути» у выезда
   const dh = new THREE.Mesh(G(.7, .6, .6), new THREE.MeshBasicMaterial({visible: false})); dh.position.set(px, .3, pz); dh.userData.zone = 2; world.add(dh); hits.push(dh);
   zones.dock = {stack: dstack, lb: dlb, glb};
   // люди
@@ -1518,15 +1531,15 @@ function build() {
   // сервер и ИИ-дрон
   server = new THREE.Group(); const sb = new THREE.Mesh(G(.38, .9, .34), M('#20242c')); sb.position.y = .45; sb.castShadow = true; server.add(sb);
   server.leds = []; for (let i = 0; i < 6; i++) { const l = new THREE.Mesh(G(.04, .04, .01), new THREE.MeshBasicMaterial({color: '#2ecc71'})); l.position.set(-.08 + (i % 2) * .16, .2 + (i >> 1) * .22, .175); server.add(l); server.leds.push(l); }
-  server.position.set(L.W - .35, 0, .7); world.add(server);
+  server.position.set(layout.W - .35, 0, .7); world.add(server);
   drone = new THREE.Group(); const db = new THREE.Mesh(new THREE.SphereGeometry(.07, 12, 8), mOrange); drone.add(db);
   drone.rot = []; for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(.05, .05, .006, 12), new THREE.MeshBasicMaterial({color: '#cfd8e6', transparent: true, opacity: .6})); r.position.set(a * .09, .03, b * .09); drone.add(r); drone.rot.push(r); }
   drone.beam = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({color: '#77ddff'})); world.add(drone.beam);
-  drone.position.set(L.W - .6, 1.4, .5); world.add(drone);
+  drone.position.set(layout.W - .6, 1.4, .5); world.add(drone);
   // свет и тени под размер мира
-  sun.position.set(L.W + 4, 9, L.H * .4 + 4); sun.target.position.set(L.W / 2, 0, L.H / 2);
-  const sc = sun.shadow.camera, m = Math.max(L.W, L.H); sc.left = -m; sc.right = m; sc.top = m; sc.bottom = -m; sc.far = 40; sc.updateProjectionMatrix(); sun.shadow.needsUpdate = true;
-  if (!view.init || view.key !== S.loc + ':' + L.VR) { view.key = S.loc + ':' + L.VR; view.init = true; if (L.VR > 6) { view.t.set(L.W * (S.loc >= POST_LV ? .24 : .4), 0, L.z0 - (S.loc >= POST_LV ? 0 : .6)); view.zoom = S.loc >= POST_LV ? 1.3 : 1.9; } else { view.t.set(L.W * (L.VR <= 3 ? .45 : .42), 0, L.H * (L.VR <= 3 ? .4 : .46)); view.zoom = L.VR <= 3 ? .92 : .95; } } // с мастерской в кадре и стол постобработки у левой стены
+  sun.position.set(layout.W + 4, 9, layout.H * .4 + 4); sun.target.position.set(layout.W / 2, 0, layout.H / 2);
+  const sc = sun.shadow.camera, m = Math.max(layout.W, layout.H); sc.left = -m; sc.right = m; sc.top = m; sc.bottom = -m; sc.far = 40; sc.updateProjectionMatrix(); sun.shadow.needsUpdate = true;
+  if (!view.init || view.key !== S.loc + ':' + layout.VR) { view.key = S.loc + ':' + layout.VR; view.init = true; if (layout.VR > 6) { view.t.set(layout.W * (S.loc >= POST_LV ? .24 : .4), 0, layout.z0 - (S.loc >= POST_LV ? 0 : .6)); view.zoom = S.loc >= POST_LV ? 1.3 : 1.9; } else { view.t.set(layout.W * (layout.VR <= 3 ? .45 : .42), 0, layout.H * (layout.VR <= 3 ? .4 : .46)); view.zoom = layout.VR <= 3 ? .92 : .95; } } // с мастерской в кадре и стол постобработки у левой стены
 }
 function mkCat() {
   const g = new THREE.Group(), fur = M('#e8873a'), add = (geo, x, y, z) => { const o = new THREE.Mesh(geo, fur); o.position.set(x, y, z); o.castShadow = false; g.add(o); return o; };
@@ -1552,19 +1565,19 @@ function mkVan() {
 const view = {t: new THREE.Vector3(), zoom: 1, init: false, key: ''};
 function placeCam() {
   const w = wrap.clientWidth, h = wrap.clientHeight; if (!w || !h) return;
-  if (R.domElement.width !== Math.round(w * R.getPixelRatio()) || R.domElement.height !== Math.round(h * R.getPixelRatio())) R.setSize(w, h);
-  const v = (Math.max(L.W, L.H) * .47) / view.zoom, a = w / h;
+  if (renderer.domElement.width !== Math.floor(w * renderer.getPixelRatio()) || renderer.domElement.height !== Math.floor(h * renderer.getPixelRatio())) renderer.setSize(w, h);
+  const v = (Math.max(layout.W, layout.H) * .47) / view.zoom, a = w / h;
   cam.left = -v * a; cam.right = v * a; cam.top = v; cam.bottom = -v; cam.updateProjectionMatrix();
-  view.t.x = Math.max(0, Math.min(L.W, view.t.x)); view.t.z = Math.max(0, Math.min(L.H, view.t.z));
+  view.t.x = Math.max(0, Math.min(layout.W, view.t.x)); view.t.z = Math.max(0, Math.min(layout.H, view.t.z));
   cam.position.set(view.t.x + 20, 20 * .95, view.t.z + 20); cam.lookAt(view.t);
 }
 const ptrs = new Map(); let drag = null;
-R.domElement.addEventListener('pointerdown', e => {
-  R.domElement.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
+renderer.domElement.addEventListener('pointerdown', e => {
+  renderer.domElement.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
   drag = {x: e.clientX, y: e.clientY, moved: false, t: view.t.clone(), z: view.zoom, d: null};
   if (ptrs.size === 2) { const [p, q] = [...ptrs.values()]; drag.d = Math.hypot(p.x - q.x, p.y - q.y); drag.moved = true; }
 });
-R.domElement.addEventListener('pointermove', e => {
+renderer.domElement.addEventListener('pointermove', e => {
   if (!drag || !ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
   if (ptrs.size === 2 && drag.d) { const [p, q] = [...ptrs.values()]; view.zoom = Math.max(.6, Math.min(3, drag.z * Math.hypot(p.x - q.x, p.y - q.y) / drag.d)); return; }
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (!drag.moved && Math.hypot(dx, dy) > 8) drag.moved = true;
@@ -1577,7 +1590,7 @@ const endPtr = e => {
   const d = drag; ptrs.delete(e.pointerId); if (ptrs.size) return; drag = null;
   if (!d || d.moved || e.type !== 'pointerup') return;
   { const rr = rackAt(e.clientX, e.clientY); if (rr >= 0) { sound('tap'); haptic(); if (window.rkOpen) rkOpen(rr); return; } }
-  const r = R.domElement.getBoundingClientRect(), ray = new THREE.Raycaster();
+  const r = renderer.domElement.getBoundingClientRect(), ray = new THREE.Raycaster();
   ray.setFromCamera(new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), cam);
   const h = ray.intersectObjects(hits.concat(prHits), false)[0]; if (!h) return;
   const u = h.object.userData;
@@ -1585,9 +1598,9 @@ const endPtr = e => {
   if (u.pi !== undefined) { A.p(u.pi); const v = printers.find(v => v.i === u.pi); if (v) v.jump = 1; } else if (u.zone === 'trash') A.clean(); else if (u.zone !== undefined) A.st(u.zone);
   sound('tap'); haptic(); if (S.money - m0 > .5) pop(e.clientX, e.clientY, '+' + fm(S.money - m0)); upd(); save();
 };
-R.domElement.addEventListener('pointerup', endPtr);
-R.domElement.addEventListener('pointercancel', endPtr);
-R.domElement.addEventListener('wheel', e => { e.preventDefault(); view.zoom = Math.max(.6, Math.min(3, view.zoom * (e.deltaY < 0 ? 1.1 : .9))); }, {passive: false});
+renderer.domElement.addEventListener('pointerup', endPtr);
+renderer.domElement.addEventListener('pointercancel', endPtr);
+renderer.domElement.addEventListener('wheel', e => { e.preventDefault(); view.zoom = Math.max(.6, Math.min(3, view.zoom * (e.deltaY < 0 ? 1.1 : .9))); }, {passive: false});
 
 // ---------- поведение людей ----------
 // человечек = агент из логики: стоит там же, где агент, несёт столько же, сколько агент
@@ -1629,25 +1642,25 @@ function actRing(p, kind, pr, idle) {
 }
 
 // ---------- кадр ----------
-const clock = new THREE.Clock(); let T = 0, lt = 0, ready = false; const fps = {n: 0, t: 0, warned: 0, bad: 0, from: 0};
+const frameTimer = new THREE.Clock(); let sceneTime = 0, lt = 0, ready = false; const fps = {n: 0, t: 0, warned: 0, bad: 0, from: 0};
 function frame() {
-  const dt = Math.min(.1, clock.getDelta()); T += dt;
+  const dt = Math.min(.1, frameTimer.getDelta()); sceneTime += dt;
   if (!ready || tab !== 'farm' || !wrap.clientWidth) return;
-  const key = S.racks + '|' + S.loc + '|' + S.eco, pk = (S.up.ams ? 'a' : '') + S.pr.slice(0, L ? L.VR * 6 : 108).map(x => x.t + '' + (x.pi != null ? x.pi : S.prod)).join(',');
-  if (key !== built) { built = key; prKey = pk; const og = geoSet(); build(); freeGeo(og); fps.from = T; fps.n = fps.t = 0; } else if (pk !== prKey) { prKey = pk; const og = geoSet(); buildPrinters(); freeGeo(og); }
+  const key = S.racks + '|' + S.loc + '|' + S.eco, pk = (S.up.ams ? 'a' : '') + S.pr.slice(0, layout ? layout.VR * 6 : 108).map(x => x.t + '' + (x.pi != null ? x.pi : S.prod)).join(',');
+  if (key !== built) { built = key; prKey = pk; const og = geoSet(); build(); freeGeo(og); fps.from = sceneTime; fps.n = fps.t = 0; } else if (pk !== prKey) { prKey = pk; const og = geoSet(); buildPrinters(); freeGeo(og); }
   const on = !(S.out > 0) || S.up.ups;
   hemi.intensity = on ? 1.6 : .35; sun.intensity = on ? 2.2 : .25;
   for (const v of printers) {
     const x = S.pr[v.i]; if (!x) continue; const st = x.st === 'run' && !on ? 'off' : x.st;
-    v.lamp.material = st === 'fail' && Math.sin(T * 10) < 0 ? LMAT.failOff : LMAT[st];
+    v.lamp.material = st === 'fail' && Math.sin(sceneTime * 10) < 0 ? LMAT.failOff : LMAT[st];
     v.bar.scale.x = st === 'run' || st === 'off' ? Math.max(.001, x.p) : .001;
-    if (st === 'run') v.heads.forEach((hd, k) => hd.position.x = (v.heads.length > 1 ? (k ? .05 : -.05) : 0) + Math.sin(T * 6 + v.ph + k * 2) * (v.heads.length > 1 ? .04 : v.sw));
+    if (st === 'run') v.heads.forEach((hd, k) => hd.position.x = (v.heads.length > 1 ? (k ? .05 : -.05) : 0) + Math.sin(sceneTime * 6 + v.ph + k * 2) * (v.heads.length > 1 ? .04 : v.sw));
     if (v.jump > 0) { v.jump -= dt * 4; v.g.scale.setScalar(1 + Math.sin(Math.max(0, v.jump) * Math.PI) * .12); }
     v.bub.visible = st === 'done' || st === 'fail' || st === 'nopl';
-    if (v.bub.visible) { v.bub.material.map = bubbleTex[st]; v.bub.position.y = v.h + .24 + Math.sin(T * 4 + v.ph) * .03; }
+    if (v.bub.visible) { v.bub.material.map = bubbleTex[st]; v.bub.position.y = v.h + .24 + Math.sin(sceneTime * 4 + v.ph) * .03; }
   }
   // столы: коробки по очереди, подписи; без людей — мигаем «тапни»
-  const blink = Math.sin(T * 6) > -.3;
+  const blink = Math.sin(sceneTime * 6) > -.3;
   [['otk', 0, 'ОТК'], ['pack', 1, 'Упаковка'], ['post', 3, 'Обработка']].forEach(([k, i, n]) => {
     const z = zones[i], q = S.q[k]; if (!z) return; z.stack.forEach((b, j) => b.visible = j < Math.min(8, Math.ceil(q / qcap(k) * 8)));
     setLabel(z.lb, n + ' ' + fn(q) + '/' + qcap(k), !tm(k) && q >= 1 || q >= qcap(k), blink);
@@ -1665,19 +1678,19 @@ function frame() {
   // фургон №1: в рейсе — уехал и возвращается (половина рейса туда, половина обратно)
   const ft = f0 && f0.st === 'road' && f0.T ? (f0.pt ? f0.pt + (f0.t - f0.pt) * TKa() : f0.t) : 0;
   van.dx = ft ? (k => 5 * (k < .5 ? k * 2 : 2 - k * 2))(1 - ft / f0.T) : 0;
-  van.g.position.x = L.dock + van.dx;
+  van.g.position.x = layout.dock + van.dx;
   const f1 = S.ag.ship[1]; van2.g.visible = !!f1;
-  if (f1) { const t1 = f1.st === 'road' && f1.T ? (f1.pt ? f1.pt + (f1.t - f1.pt) * TKa() : f1.t) : 0; van2.g.position.x = L.dock + (t1 ? (k => 5 * (k < .5 ? k * 2 : 2 - k * 2))(1 - t1 / f1.T) : 0);
+  if (f1) { const t1 = f1.st === 'road' && f1.T ? (f1.pt ? f1.pt + (f1.t - f1.pt) * TKa() : f1.t) : 0; van2.g.position.x = layout.dock + (t1 ? (k => 5 * (k < .5 ? k * 2 : 2 - k * 2))(1 - t1 / f1.T) : 0);
     van2.load.forEach((b, j) => b.visible = j < Math.min(12, Math.ceil(f1.c / vc * 12))); }
   // люди
   const P_ = people;
   pool(P_.op, S.ag.op.length, ['m1', 'm3', 'f3']); S.ag.op.forEach((a, i) => show(P_.op[i], a, dt, i));
   pool(P_.pack, S.ag.pack.length, ['m2', 'f1', 'm3']); S.ag.pack.forEach((a, i) => show(P_.pack[i], a, dt, i));
   const no = S.loc >= OTK_LV ? Math.min(3, tm('otk')) : 0; pool(P_.otk, no, ['f1', 'f3']);
-  P_.otk.forEach((p, i) => { p.x = L.otk + .3 + i * .3; p.z = L.z0 - .15; p.o.rotation.y = 0; p.box.visible = false; p.play(S.q.otk >= 1 ? 'interact-right' : 'idle'); });
+  P_.otk.forEach((p, i) => { p.x = layout.otk + .3 + i * .3; p.z = layout.z0 - .15; p.o.rotation.y = 0; p.box.visible = false; p.play(S.q.otk >= 1 ? 'interact-right' : 'idle'); });
   const nq = S.loc >= POST_LV ? Math.min(3, tm('post')) : 0; pool(P_.post, nq, ['m2', 'f3']);
-  P_.post.forEach((p, i) => { p.x = L.otk + 1.32; p.z = L.post + .12 + i * .22; p.o.rotation.y = -Math.PI / 2; p.box.visible = false; p.play(S.q.post >= 1 ? 'interact-right' : 'idle'); }); // обработчики — с правого торца стола: операторы кладут детали с северного края
-  P_.cr.o.visible = !!tm('ship') && f0 && f0.st === 'dock'; P_.cr.x = L.dock - .3; P_.cr.z = L.z0 + 2.2; P_.cr.o.rotation.y = Math.PI * .75; P_.cr.box.visible = false; P_.cr.play(f0 && f0.c ? 'interact-right' : 'idle');
+  P_.post.forEach((p, i) => { p.x = layout.otk + 1.32; p.z = layout.post + .12 + i * .22; p.o.rotation.y = -Math.PI / 2; p.box.visible = false; p.play(S.q.post >= 1 ? 'interact-right' : 'idle'); }); // обработчики — с правого торца стола: операторы кладут детали с северного края
+  P_.cr.o.visible = !!tm('ship') && f0 && f0.st === 'dock'; P_.cr.x = layout.dock - .3; P_.cr.z = layout.z0 + 2.2; P_.cr.o.rotation.y = Math.PI * .75; P_.cr.box.visible = false; P_.cr.play(f0 && f0.c ? 'interact-right' : 'idle');
   if (!working()) for (const p of [...P_.op, ...P_.pack, ...P_.otk, ...P_.post, P_.cr]) p.o.visible = false; // ночью без смены — по домам
   const wr = a => a.w > 0 && a.wT > 0 ? 1 - a.w / a.wT : null;
   S.ag.op.forEach((a, i) => actRing(P_.op[i], 'op', wr(a), a.st === 'wait' && !(a.w > 0)));
@@ -1688,30 +1701,30 @@ function frame() {
   actRing(P_.cr, 'ship', f0 && f0.st === 'dock' && S.q.ship >= 1 && f0.t > 0 ? Math.min(1, f0.t / BAL.load) : null);
   for (const p of [...P_.op, ...P_.pack, ...P_.otk, ...P_.post, P_.cr]) { p.o.position.set(p.x, 0, p.z); p.mix.update(dt); }
   // сервер и дрон
-  server.visible = !!S.mg.srv; server.leds.forEach((l, i) => l.material.color.set(Math.sin(T * 6 + i * 1.7) > 0 ? '#2ecc71' : '#0a3d1f'));
+  server.visible = !!S.mg.srv; server.leds.forEach((l, i) => l.material.color.set(Math.sin(sceneTime * 6 + i * 1.7) > 0 ? '#2ecc71' : '#0a3d1f'));
   drone.visible = drone.beam.visible = !!S.mg.ai;
   if (S.mg.ai) {
     const f = printers.find(v => S.pr[v.i] && S.pr[v.i].st === 'fail'), tp = new THREE.Vector3();
-    if (f) f.g.getWorldPosition(tp).add(new THREE.Vector3(0, .5, .1)); else tp.set(L.W - .6 + Math.sin(T) * .2, 1.4 + Math.sin(T * 2) * .05, .5);
+    if (f) f.g.getWorldPosition(tp).add(new THREE.Vector3(0, .5, .1)); else tp.set(layout.W - .6 + Math.sin(sceneTime) * .2, 1.4 + Math.sin(sceneTime * 2) * .05, .5);
     drone.position.lerp(tp, Math.min(1, dt * 2.5)); drone.rot.forEach(r => r.rotation.y += dt * 40);
-    drone.beam.visible = !!f && drone.position.distanceTo(tp) < .2 && Math.sin(T * 20) > 0;
+    drone.beam.visible = !!f && drone.position.distanceTo(tp) < .2 && Math.sin(sceneTime * 20) > 0;
     if (drone.beam.visible) { const b = new THREE.Vector3(); f.g.getWorldPosition(b); drone.beam.geometry.setFromPoints([drone.position.clone(), b]); }
   }
   // летящие деньги
   if (VIS.cash > 0 && (lt += dt) > .8) {
     const s = label('+' + fm(VIS.cash), false); s.material.map.dispose();
     s.material.map = canvasTex(256, 64, g => { g.fillStyle = '#2ecc71'; g.font = '900 40px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('+' + fm(VIS.cash), 128, 34); });
-    s.position.set(L.dock + .6, 1.2, L.z0 + 1.65); world.add(s); flo.push({s, t: 0}); VIS.cash = 0; lt = 0; // клиент принял груз — «+₽» над местом стоянки фургона, не улетает с ним за кадр
+    s.position.set(layout.dock + .6, 1.2, layout.z0 + 1.65); world.add(s); flo.push({s, t: 0}); VIS.cash = 0; lt = 0; // клиент принял груз — «+₽» над местом стоянки фургона, не улетает с ним за кадр
   }
   flo = flo.filter(f => { f.t += dt; f.s.position.y += dt * .5; f.s.material.opacity = 1 - f.t / 1.4; if (f.t > 1.4) { world.remove(f.s); f.s.material.map.dispose(); f.s.material.dispose(); return false; } return true; });
-  if (arm) arm.rotation.y = Math.sin(T * 1.3) * .9; // робот переносит коробки
+  if (arm) arm.rotation.y = Math.sin(sceneTime * 1.3) * .9; // робот переносит коробки
   { const n = Math.ceil((S.trash || 0) / 2.5); trashG.forEach((b, i) => b.visible = i < n); }  // мусор
   if (lampL) { const nt = night(); lampL.intensity = nt ? 2.2 : 0; lampB.material.color.set(nt ? '#fff3c4' : '#9aa0a8'); } // фонарь ночью
   // клиент заходит с улицы за заказом и уносит коробку
-  if (VIS.client > 0 && clients.length < 3) { VIS.client--; const p = person(['m3', 'f3', 'm2'][clients.length % 3]); p.x = L.W + 2.2; p.z = L.z0 + 2.4;
-    clients.push({p, path: [[L.dock + .9, L.z0 + 2.4], [L.dock + .9, L.z0 + 1.1]], st: 'in', w: 0}); }
+  if (VIS.client > 0 && clients.length < 3) { VIS.client--; const p = person(['m3', 'f3', 'm2'][clients.length % 3]); p.x = layout.W + 2.2; p.z = layout.z0 + 2.4;
+    clients.push({p, path: [[layout.dock + .9, layout.z0 + 2.4], [layout.dock + .9, layout.z0 + 1.1]], st: 'in', w: 0}); }
   clients = clients.filter(c => { const p = c.p; if (c.w > 0) { c.w -= dt; p.play('interact-right'); p.mix.update(dt); return true; }
-    if (!c.path.length) { if (c.st === 'in') { c.st = 'out'; c.w = 1; p.box.visible = true; c.path = [[L.dock + .9, L.z0 + 2.4], [L.W + 2.6, L.z0 + 2.4]]; return true; } world.remove(p.o); return false; }
+    if (!c.path.length) { if (c.st === 'in') { c.st = 'out'; c.w = 1; p.box.visible = true; c.path = [[layout.dock + .9, layout.z0 + 2.4], [layout.W + 2.6, layout.z0 + 2.4]]; return true; } disposePerson(p); return false; }
     const [tx, tz] = c.path[0], dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz), st = dt * .9; if (d <= st) { p.x = tx; p.z = tz; c.path.shift(); } else { p.x += dx / d * st; p.z += dz / d * st; p.o.rotation.y = Math.atan2(dx, dz); }
     p.play(p.box.visible ? 'holding-both' : 'walk'); p.o.position.set(p.x, 0, p.z); p.mix.update(dt); return true; });
   // стена катушек: по запасу пластика
@@ -1719,7 +1732,7 @@ function frame() {
   // окна: ночью тёмные
   { const n = night(); for (const w of wins) w.material.color.set(n ? '#1a2333' : '#bfe3ff'); }
   // доска заказов и часы — перерисовываем, только когда что-то поменялось
-  if (board) { const k = S.board.map(b => b.n + b.got + '/' + b.need).join('|'); if (k !== board.userData.k && T - (board.userData.t || -9) > 1) { board.userData.k = k; board.userData.t = T;
+  if (board) { const k = S.board.map(b => b.n + b.got + '/' + b.need).join('|'); if (k !== board.userData.k && sceneTime - (board.userData.t || -9) > 1) { board.userData.k = k; board.userData.t = sceneTime;
     const t = canvasTex(256, 144, g => { g.fillStyle = '#6b4f35'; g.fillRect(0, 0, 256, 144); g.fillStyle = '#c8a77e'; g.fillRect(6, 6, 244, 132);
       S.board.slice(0, 3).forEach((b, i) => { g.fillStyle = ['#ffe66d', '#ffb3c6', '#a8e6cf'][i]; g.fillRect(12 + i * 80, 18, 72, 108); g.fillStyle = '#222'; g.font = 'bold 12px system-ui';
         const w = PR[b.p].n.split(' '); w.slice(0, 3).forEach((s2, j) => g.fillText(s2.slice(0, 10), 16 + i * 80, 38 + j * 15)); g.font = 'bold 16px system-ui'; g.fillText(fn(b.got) + '/' + fn(b.need), 16 + i * 80, 112); }); });
@@ -1730,24 +1743,24 @@ function frame() {
       g.lineWidth = 3; g.beginPath(); g.moveTo(48, 48); g.lineTo(48 + Math.cos(b) * 34, 48 + Math.sin(b) * 34); g.stroke(); });
     wclock.material.map.dispose(); wclock.material.map = t; wclock.material.needsUpdate = true; } }
   // кот: спит, иногда идёт к случайной точке и возвращается
-  if (cat) { cat.tail.rotation.y = Math.sin(T * 2) * .5; cat.t -= dt;
-    if (!cat.go && cat.t <= 0) { cat.go = [L.otk + Math.random() * (L.W - 1), L.z0 + .6 + Math.random() * .6]; cat.g.position.y = 0; }
+  if (cat) { cat.tail.rotation.y = Math.sin(sceneTime * 2) * .5; cat.t -= dt;
+    if (!cat.go && cat.t <= 0) { cat.go = [layout.otk + Math.random() * (layout.W - 1), layout.z0 + .6 + Math.random() * .6]; cat.g.position.y = 0; }
     if (cat.go) { const p = cat.g.position, dx = cat.go[0] - p.x, dz = cat.go[1] - p.z, d = Math.hypot(dx, dz);
       if (d < .02) { if (cat.go === cat.home) { cat.go = null; p.y = cat.y0; cat.t = 15 + Math.random() * 20; } else cat.go = cat.home; }
       else { p.x += dx / d * Math.min(d, dt * .35); p.z += dz / d * Math.min(d, dt * .35); cat.g.rotation.y = Math.atan2(-dz, dx); } } }
   // дымок над сломанными принтерами, пар над кофемашиной
-  if ((T * 4 | 0) !== ((T - dt) * 4 | 0)) { const v = new THREE.Vector3(); for (const pv of printers) { const x = S.pr[pv.i]; if (x && x.st === 'fail') { pv.g.getWorldPosition(v); v.y += pv.h + .1; puff(v, '#8a8f99', .18); } }
+  if ((sceneTime * 4 | 0) !== ((sceneTime - dt) * 4 | 0)) { const v = new THREE.Vector3(); for (const pv of printers) { const x = S.pr[pv.i]; if (x && x.st === 'fail') { pv.g.getWorldPosition(v); v.y += pv.h + .1; puff(v, '#8a8f99', .18); } }
     if (coffeeAt && Math.random() < .5) puff(coffeeAt, '#ffffff', .1); }
   puffs = puffs.filter(f => { f.t += dt; f.m.position.y += dt * .25; f.m.scale.setScalar(f.s * (1 + f.t)); f.m.material.opacity = Math.max(0, .7 - f.t * .45); if (f.t > 1.6) { world.remove(f.m); f.m.material.dispose(); return false; } return true; });
-  conv.forEach(b => { b.position.z += dt * .4; if (b.position.z > L.z0 - .1) b.position.z = .8; });
+  conv.forEach(b => { b.position.z += dt * .4; if (b.position.z > layout.z0 - .1) b.position.z = .8; });
   // автоэконом: не мерим первые 5 с после загрузки и пересборки (там рывки у всех), включаем только после двух плохих окон подряд (FPS < 24)
-  if (T - fps.from > 5) { fps.n++; fps.t += dt; if (fps.t > 4) { const f = fps.n / fps.t; fps.bad = f < 24 ? fps.bad + 1 : 0;
+  if (sceneTime - fps.from > 5) { fps.n++; fps.t += dt; if (fps.t > 4) { const f = fps.n / fps.t; fps.bad = f < 24 ? fps.bad + 1 : 0;
     if (!S.eco && fps.bad >= 2 && !fps.warned) { fps.warned = 1; S.eco = 1; S.ecoAuto = 1; toast('🪫 Включил экономную графику — телефон не тянет тени. Вернуть можно во вкладке «Рост»'); } fps.n = 0; fps.t = 0; } }
   if (glLost) return;
-  try { placeCam(); rackLabels(); R.render(scene, cam); } catch (e) { built = ''; } // сбой кадра — пересобрать сцену в следующем
+  try { placeCam(); rackLabels(); renderer.render(scene, cam); } catch (e) { built = ''; } // сбой кадра — пересобрать сцену в следующем
 }
 loadAssets().then(() => { ready = true; $('smsg').remove(); }).catch(e => { $('smsg').textContent = 'Не загрузилась 3D-графика: ' + e.message; });
 window.render3d = frame; // зовёт главный цикл game.js после тактов логики
-window.__T3 = {view, get flo() { return flo.length; }, get hits() { return hits.concat(prHits); }, get people() { return people; }, get van() { return van; }, cam, R, THREE};
+window.__T3 = {view, get flo() { return flo.length; }, get hits() { return hits.concat(prHits); }, get people() { return people; }, get van() { return van; }, cam, R: renderer, THREE};
 </script>
 </body></html>
