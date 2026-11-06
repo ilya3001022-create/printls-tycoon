@@ -282,7 +282,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.21.2'; // номер версии подставляет release.sh
+const APPV='0.21.3'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=18; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -511,12 +511,12 @@ function tick(dt){
   // расходы: зарплаты и электричество; нечем платить — люди работают вполсилы
   const w=wages()*dt,e=el*elecK()*dt;spend(w,'w');spend(e,'e');
   if(S.money<0){S.money=0;if(!S.broke){S.broke=1;toast(wages()?'💸 Нечем платить зарплату — люди работают вполсилы. Уволь лишних или подними доход':'💡 Нечем платить за свет — отвези готовое, чтобы заработать');sound('bad')}}else if(S.money>w*50)S.broke=0;
-  // выручка запчастью: все принтеры стоят из-за поломок, а на запчасть денег нет — сосед/знакомый даёт бесплатно (раз в 2 мин)
+  // выручка запчастью: все принтеры стоят из-за поломок, а на запчасть денег нет — сосед/знакомый даёт бесплатно (раз в 2 мин). Готовое считаем по цене распродажи: спрос мог быть выбран, реклама — кончиться
   {const br=S.pr.filter(x=>x.st==='fail'&&FAULTS[x.fk||0].p);if(br.length&&!S.pr.some(x=>x.st==='run'||x.st==='done')&&S.emT<=0){const pk=FAULTS[br[0].fk||0].p,pt=PT_(pk);
-    if(!(S.parts[pk]>0)&&S.money<ptC(pt)*1.2&&qAll()*mix().p*pm()+S.money<ptC(pt)*1.2){S.parts[pk]=(S.parts[pk]||0)+1;S.emT=120;toast('🤝 Знакомый выручил: дал «'+pt.n+'» бесплатно. Держи запас запчастей!')}}}
+    if(!(S.parts[pk]>0)&&S.money<ptC(pt)*1.2&&qAll()*mix().p*pm()*BAL.sale+S.money<ptC(pt)*1.2){S.parts[pk]=(S.parts[pk]||0)+1;S.emT=120;toast('🤝 Знакомый выручил: дал «'+pt.n+'» бесплатно. Держи запас запчастей!')}}}
   // аварийная катушка: без пластика и без денег игра не должна умирать
   if(S.emT>0)S.emT-=dt;
-  if(S.pl<p.g&&S.money<plPrice()&&qAll()*mix().p*pm()+S.money<plPrice()&&!S.pr.some(x=>x.st==='run'||x.st==='done')&&S.emT<=0){S.pl+=500;S.emT=60;toast('🧵 Аварийная катушка 0,5 кг — бесплатно. Оставляй деньги на пластик!')}
+  if(S.pl<p.g&&S.money<plPrice()&&qAll()*mix().p*pm()*BAL.sale+S.money<plPrice()&&!S.pr.some(x=>x.st==='run'||x.st==='done')&&S.emT<=0){S.pl+=500;S.emT=60;toast('🧵 Аварийная катушка 0,5 кг — бесплатно. Оставляй деньги на пластик!')}
   if(!S.mg.sup&&S.pl<p.g*S.pr.length*4){if(!S.lowpl){S.lowpl=1;toast('🧵 Пластик кончается — купи катушку под цехом');sound('bad')}}else S.lowpl=0;
   if(S.offer){S.offer.left-=dt;if(S.offer.left<=0)S.offer=null}
   if(S.boostT>0)S.boostT-=dt;if(S.boostCD>0)S.boostCD-=dt;
@@ -715,19 +715,25 @@ function sound(k){if(!S||!S.snd)return;try{if(!audio())return;const t=AC.current
   else tone(660,.04,'triangle',.06,0)}catch(e){}}
 function pop(x,y,t){const d=document.createElement('div');d.className='pop';d.style.left=x+'px';d.style.top=y+'px';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),1000)}
 function hintText(){const f=[...stages()].reverse().find(k=>S.q[k]>=qcap(k)-.01); // забитый участок ближе к клиенту — главный
-  {const w=S.pr.find(x=>x.st==='fail'&&FAULTS[x.fk||0].p&&!(S.parts[FAULTS[x.fk||0].p]>0));if(w&&(S.mg.tech||S.mg.ai))return'🔧 Принтер ждёт запчасть «'+PT_(FAULTS[w.fk||0].p).n+'» — Магазин → Запчасти'}
+  {const w=S.pr.find(x=>x.st==='fail'&&FAULTS[x.fk||0].p&&!(S.parts[FAULTS[x.fk||0].p]>0));if(w){const pt=PT_(FAULTS[w.fk||0].p),c=ptC(pt)*1.2,nm='«'+pt.n+'»';
+    if(S.mg.tech||S.mg.ai)return'🔧 Принтер ждёт запчасть '+nm+' — Магазин → Запчасти';
+    if(S.money>=c)return'👉 Красный «!» — авария, нужна запчасть '+nm+'. Тапни принтер — срочно купишь за '+fm(c);
+    // денег на запчасть нет: ведём к ручной продаже готового (иначе игрок тапает принтер вхолостую)
+    if(S.q.ship>=1)return'👉 На запчасть '+nm+' ('+fm(c)+') не хватает — тапни машину, отвези заказ и получи деньги';
+    if(qAll()>=1)return'👉 На запчасть '+nm+' ('+fm(c)+') не хватает — тапни стол с деталями, потом машину: деньги пойдут на ремонт';
+    return'🔧 На запчасть '+nm+' ('+fm(c)+') не хватает — подожди: знакомый выручит запчастью'}}
   if(S.pr.some(x=>x.st==='fail')&&!S.mg.tech&&!S.mg.ai)return'👉 Красный «!» — авария. Тапни принтер, чтобы починить';
-  if(S.pr.every(x=>x.st==='nopl'))return S.money>=plPrice()?'👉 Кончился пластик — купи катушку под цехом':'👉 Кончился пластик — отвези готовое, деньги пойдут на катушку';
+  if(S.pr.every(x=>x.st==='nopl'))return S.money>=plPrice()?'👉 Кончился пластик — купи катушку под цехом':'👉 Кончился пластик — отвези готовое: тапни стол с деталями, потом машину — выручка пойдёт на пластик';
   if(f){const r=S.team[f],nm='«'+(f==='ship'?'Склад у ворот':ROLE[f].n)+'» '+zab(f)+' '+qcap(f)+'/'+qcap(f);
-    if(!r.n&&(ST_FIX.includes(f)||S.made>400))return'👉 '+nm+' — '+(r.pl?'найми ':'купи рабочее место и найми ')+ROLE[f].one+'а во вкладке «Люди»';
-    return'👉 '+nm+(r.n?' — не успевают: обучи или найми ещё в «Людях», расширь в «Участках»':' — тапни '+(f==='ship'?'машину':'стол')+' или расширь в «Участках»')}
-  if(S.pr.some(x=>x.st==='done')&&!tm('op'))return'👉 Тапни принтер с ✓ — сними готовый стол';
-  if(S.q.pack>=1&&!tm('pack'))return'👉 Тапни стол упаковки';
+    if(!r.n&&opn('team')&&(ST_FIX.includes(f)||S.made>400)&&S.money>=(r.pl?hcost(f):plcost(f)))return'👉 '+nm+' — '+(r.pl?'найми ':'купи рабочее место и найми ')+ROLE[f].one+'а во вкладке «Люди»';
+    return'👉 '+nm+(r.n?' — не успевают: обучи или найми ещё в «Людях», расширь в «Участках»':' — тапни '+(f==='ship'?'машину':'стол')+(opn('chain')?' или расширь в «Участках»':'')+(r.n||S.money>=plcost(f)?'':' — деньги пойдут на найм'))}
+  if(opn('shop')&&S.made<400&&S.pr.length<maxPr()&&S.money>=pcost(0))return'👉 Купи ещё принтер во вкладке «Магазин»';
   if(S.q.ship>=1&&!tm('ship'))return'👉 Тапни машину — отвези заказ и получи деньги';
-  if(!tm('pack')){const r=S.team.pack;
+  if(S.q.pack>=1&&!tm('pack'))return'👉 Тапни стол упаковки';
+  if(S.pr.some(x=>x.st==='done')&&!tm('op'))return'👉 Тапни принтер с ✓ — сними готовый стол';
+  if(!tm('pack')&&opn('team')){const r=S.team.pack;
     if(!r.pl&&S.money>=plcost('pack'))return'👉 Купи рабочее место упаковщику во вкладке «Люди»';
     if(r.pl&&S.money>=hcost('pack'))return'👉 Найми упаковщика во вкладке «Люди» — он пакует сам'}
-  if(S.made<400&&S.pr.length<maxPr()&&S.money>=pcost(0))return'👉 Купи ещё принтер во вкладке «Магазин»';
   if(S.loc>=MP_LV&&(S.star||4.5)<3.5){const st='⭐ Рейтинг магазина '+(S.star||4.5).toFixed(1).replace('.',',')+' — ',tg=' Рейтинг тянется к ★'+starT().toFixed(1).replace('.',',')+'.';
     if(dirt()>0)return st+'в цехе мусор, брак +'+Math.round(dirt())+'%. Тапни кучу или найми уборщицу («Люди»).'+tg;
     if((S.up.cal||0)<8)return st+'покупатели недовольны браком '+Math.round(defect()*100)+'%. Калибровка во вкладке «Рост» поднимет его.'+tg;
@@ -738,11 +744,14 @@ function hintText(){const f=[...stages()].reverse().find(k=>S.q[k]>=qcap(k)-.01)
   if(S.made<5)return'👉 Тапай принтер — печать идёт быстрее';
   return goal()}
 function goal(){ // следующая цель видна всегда — чтобы игрок не терялся
-  const bd=S.board.findIndex(b=>b.got>=b.need);if(bd>=0)return'📋 Заказ «'+S.board[bd].n+'» готов — забери награду на вкладке «Цех»';
-  if(impN()<4&&S.money>=impC())return'🔨 Обустрой площадку: «'+IMP[S.loc][impN()]+'» — вкладка «Рост»';
+  const bd=opn('board')?S.board.findIndex(b=>b.got>=b.need):-1;if(bd>=0)return'📋 Заказ «'+S.board[bd].n+'» готов — забери награду на вкладке «Цех»';
+  if(opn('grow')&&impN()<4&&S.money>=impC())return'🔨 Обустрой площадку: «'+IMP[S.loc][impN()]+'» — вкладка «Рост»';
   if(S.build)return'🏗 Идёт стройка: '+LOC[S.build.to].n+' — можно закрыть игру и вернуться';
   const nl=LOC[S.loc+1];
-  if(nl&&clDone(S.loc)>=2)return S.money>=nl.c?'🎯 Можно переезжать: вкладка «Рост» → '+nl.n:'🎯 Цель: накопить '+fm(nl.c)+' на переезд — '+nl.n;
+  if(nl&&opn('clients')&&clDone(S.loc)>=2)return S.money>=nl.c?'🎯 Можно переезжать: вкладка «Рост» → '+nl.n:'🎯 Цель: накопить '+fm(nl.c)+' на переезд — '+nl.n;
+  if(!opn('clients')){ // крупные клиенты и «Рост» ещё закрыты: показываем ближайший порог открытия, а не задачу из закрытого блока
+    const g=[['shop',5],['chain',12],['board',15],['team',20],['clients',30],['grow',40]].find(([k,n])=>!opn(k)&&S.made<n);
+    return g?'🖨 Ещё '+(g[1]-S.made)+' дет. до открытия «'+GATE[g[0]][0]+'» — тапай принтер и вози готовое':'🖨 Печатай и вози готовое — скоро откроются новые вкладки'}
   let best=null; // задача клиента, ближе всего к выполнению
   CL[S.loc].forEach((c,i)=>{const st=cst(i);if(st.done)return;
     if(st.t.every(Boolean)){best={v:2,t:'🎯 Сдай заказ клиенту «'+c.n+'» на вкладке «Цех»'};return}
