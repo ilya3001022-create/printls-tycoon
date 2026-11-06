@@ -282,7 +282,7 @@ function fixPrinter(x,i,auto){const f=FAULTS[x.fk||0];
   sound('fix');restart(x,i);return true}
 // Эндер с Klipper печатает быстрее
 const spOf=x=>PT[x.t].sp*(x.t===0&&S.up.klipper?1.8:1);
-const APPV='0.21.1'; // номер версии подставляет release.sh
+const APPV='0.21.2'; // номер версии подставляет release.sh
 const KEY='printls_tycoon',VER=18; // ключ больше не меняется; формат — по полю ver и миграциям
 
 // ---------- состояние ----------
@@ -605,11 +605,37 @@ const MIG={
   8:s=>{const l=Math.min(5,s.loc||0),f=NEWC[l]/OLDC[l];s.money=Math.max(500,(s.money||0)*f);s.best=(s.best||0)*f;s.run=(s.run||0)*f;s.all=(s.all||0)*f;s.rate=0;s.exp=0;s.fm=0;s.fw=[];s.board=[];s.offer=null;s.order=null;return s}};
 function merge(b,j){for(const k in j){const v=j[k];if(v&&typeof v==='object'&&!Array.isArray(v)&&b[k]&&typeof b[k]==='object'&&!Array.isArray(b[k]))merge(b[k],v);else b[k]=v}return b}
 function upgrade(j){let v=j.ver||0;while(v<VER&&MIG[v]){j=MIG[v](j);v++}j.ver=VER;return merge(fresh(),j)}
-let hadLocal=false,bootLast=0;
-function load(){try{let j=JSON.parse(localStorage.getItem(KEY));
+let hadLocal=false,bootLast=0,waitOwn=1,ownAt=0,bootRev,gen=0,ro=0,roWhy='',myRev=0; // gen — поколение профиля (импорт/сброс/престиж), ro — копия не пишет (чужой владелец записи), myRev — ревизия, которую мы сами записали/загрузили
+const revOf=s=>{const m=/"rev":(\d+)/.exec(s||'');return m?+m[1]:0}; // счётчик ревизии S.rev — внутри сохраняемого объекта, формат тот же
+// проверка структуры сохранения до замены S: возвращает текст ошибки или ''. strict — ещё и версия (для кода PT1)
+function badSave(o,strict){if(!o||typeof o!=='object'||Array.isArray(o)||!Array.isArray(o.pr)||!o.pr.length)return 'нет списка принтеров';
+  if(strict&&o.ver!==undefined&&!(Number.isInteger(o.ver)&&o.ver>=0&&o.ver<=VER))return 'версия '+o.ver+' не поддерживается';
+  for(const x of o.pr)if(!x||typeof x!=='object'||!Number.isInteger(x.t)||x.t<0||x.t>=PT.length||!Number.isFinite(x.p||0)||typeof x.st!=='string')return 'неверный принтер';
+  if(o.loc!==undefined&&!(Number.isInteger(o.loc)&&o.loc>=0&&o.loc<LOC.length))return 'неверная площадка';
+  for(const k of ['money','gems','all','best','run','rep'])if(o[k]!==undefined&&!(Number.isFinite(o[k])&&o[k]>=0))return 'неверное число '+k;
+  let n=0;const walk=v=>{if(++n>300000)return 1;if(typeof v==='number')return !Number.isFinite(v);if(v&&typeof v==='object'){for(const k in v)if(walk(v[k]))return 1}return 0};
+  return walk(o)?'число вне диапазона':''}
+function load(){let raw=null;try{raw=localStorage.getItem(KEY);let j=JSON.parse(raw);
   if(!j)for(const v of [7,6]){const o=JSON.parse(localStorage.getItem('printls_tycoon_v'+v)||'null');if(o&&o.pr){o.ver=v;j=o;break}}
-  if(j&&j.pr){hadLocal=true;bootLast=j.last||0;return upgrade(j)}}catch(e){}return fresh()}
-function save(){S.last=Date.now();S.ver=VER;const j=JSON.stringify(S);try{localStorage.setItem(KEY,j)}catch(e){}cloudSave(j)}
+  if(j&&j.pr){if(badSave(j)){try{localStorage.setItem(KEY+'_bad',raw)}catch(e){}return fresh()} // битое не используем, но и не теряем: копия в printls_tycoon_bad
+    hadLocal=true;bootLast=j.last||0;bootRev=j.rev;myRev=j.rev||0;return upgrade(j)}}catch(e){if(raw)try{localStorage.setItem(KEY+'_bad',raw)}catch(x){}}return fresh()}
+function save(){if(ro||waitOwn)return; // пока не выяснили, есть ли другая пишущая вкладка (~0,4 с после запуска), не пишем
+ let cur=0;try{cur=revOf(localStorage.getItem(KEY))}catch(e){}
+  if(cur>myRev){goRO('rev');return} // в хранилище уже лежит более новая запись другой копии — не затираем
+  S.rev=Math.max(S.rev||0,myRev)+1;S.last=Date.now();S.ver=VER;const j=JSON.stringify(S);try{localStorage.setItem(KEY,j);myRev=S.rev}catch(e){}cloudSave(j)}
+// явная замена профиля (импорт, сброс, престиж): ревизия растёт, старые запросы облака отменяются
+function swapS(n){n.rev=Math.max(S.rev||0,myRev,n.rev||0)+1;S=n;gen++;hadLocal=true}
+// одна вкладка-писатель: остальные только показывают баннер и ничего не пишут
+function goRO(w){if(ro)return;ro=1;roWhy=w;roBanner()}
+function roBanner(){try{let d=document.getElementById('rob');if(!d){d=document.createElement('div');d.id='rob';d.style.cssText='position:fixed;left:0;right:0;top:0;z-index:99999;background:#b3261e;color:#fff;padding:10px;text-align:center;font:600 14px sans-serif';document.body.appendChild(d)}
+  d.textContent=roWhy==='cloud'?'Прогресс обновлён на другом устройстве. Перезапусти игру — эта копия ничего не сохраняет.':roWhy==='closed'?'Другая вкладка закрыта. Обнови страницу, чтобы продолжить с сохранённым прогрессом.':'Игра открыта в другой вкладке. Закрой эту вкладку или обнови страницу — эта копия ничего не сохраняет.'}catch(e){}}
+const TABID=Math.random().toString(36).slice(2),TAB0=Date.now();let bc=null;
+try{bc=new BroadcastChannel(KEY);bc.onmessage=e=>{const m=e.data||{};if(m.id===TABID)return;
+    if(m.t==='hi'&&!ro&&(TAB0<m.ts||TAB0===m.ts&&TABID<m.id)){ownAt=Date.now();bc.postMessage({t:'own',id:TABID,to:m.id})} // старшая вкладка отвечает: я пишу
+    else if(m.t==='own'&&m.to===TABID)goRO('tab');
+    else if(m.t==='bye'&&ro&&roWhy==='tab'){roWhy='closed';roBanner()}};
+  bc.postMessage({t:'hi',id:TABID,ts:TAB0});setTimeout(()=>{waitOwn=0},400)}catch(e){waitOwn=0}
+window.addEventListener('storage',e=>{if(e.key===KEY&&e.newValue&&Date.now()-ownAt>3000&&revOf(e.newValue)>myRev)goRO('rev')});
 // облако Telegram: значение до 4096 символов — режем на куски
 let TG=null,cloudT=0;
 // Telegram: скрипт грузится асинхронно — игра не ждёт telegram.org. Когда догрузился: цвета, «Назад», облако
@@ -626,20 +652,31 @@ function backBtn(){if(!TG||!TG.BackButton)return;const need=!!document.getElemen
 // Заголовок пишем только после подтверждённой записи всех кусков: закрыли игру посреди записи — цела другая ячейка.
 // При загрузке берём самую свежую целую копию. Пока облако не прочитано, в него не пишем — свежая игра не затрёт прогресс.
 const hsh=t=>{let h=5381;for(let i=0;i<t.length;i++)h=(h*33+t.charCodeAt(i))|0;return h>>>0};
-let cloudReady=false,cloudBusy=0,cloudSlot=0;
-function cloudSave(j,now){if(!TG||!TG.CloudStorage||!cloudReady||cloudBusy&&Date.now()-cloudBusy<20000||!now&&Date.now()-cloudT<15000)return;cloudT=cloudBusy=Date.now();
-  const sl='ab'[cloudSlot],n=Math.ceil(j.length/4000),hd=n+'|'+j.length+'|'+hsh(j)+'|'+(S.last||Date.now());let left=n,bad=0;
-  const done=e=>{if(e)bad=1;if(--left>0)return;if(bad){cloudBusy=0;return}
-    TG.CloudStorage.setItem(sl+'h',hd,e2=>{cloudBusy=0;if(!e2)cloudSlot^=1})}; // ячейка записана — следующая запись в другую
-  try{for(let i=0;i<n;i++)TG.CloudStorage.setItem(sl+'_'+i,j.slice(i*4000,(i+1)*4000),done)}catch(e){cloudBusy=0}}
+let cloudReady=false,cloudBusy=0,cloudSlot=0,cloudPend=null,cloudRev=0; // cloudPend — последняя версия, ждущая окончания текущей записи; cloudRev — ревизия облака, которую мы знаем
+const hdRev=h=>+String(h||'').split('|')[4]||0; // 5-е поле заголовка — ревизия (в старых заголовках нет)
+function cloudSave(j,now,m){if(ro||waitOwn||!TG||!TG.CloudStorage||!cloudReady)return;
+  if(cloudBusy&&Date.now()-cloudBusy<20000){if(now)cloudPend={j,m:m||{last:S.last,rev:S.rev}};return} // занято — запомнить последнюю версию, отправим сразу после текущей
+  if(!now&&Date.now()-cloudT<15000)return;cloudT=cloudBusy=Date.now();cloudPend=null;
+  const mt=m||{last:S.last,rev:S.rev},fin=()=>{cloudBusy=0;const p=cloudPend;cloudPend=null;if(p&&!ro)cloudSave(p.j,1,p.m)};
+  const go=()=>{const sl='ab'[cloudSlot],n=Math.ceil(j.length/4000),hd=n+'|'+j.length+'|'+hsh(j)+'|'+(mt.last||Date.now())+'|'+(mt.rev||0);let left=n,bad=0;
+    const done=e=>{if(e)bad=1;if(--left>0)return;if(bad){fin();return}
+      cloudRev=Math.max(cloudRev,mt.rev||0); // до отправки заголовка: при ошибке ответа запись могла дойти, от себя в «только чтение» не уходим
+      TG.CloudStorage.setItem(sl+'h',hd,e2=>{if(!e2)cloudSlot^=1;fin()})}; // ячейка записана — следующая запись в другую
+    try{for(let i=0;i<n;i++)TG.CloudStorage.setItem(sl+'_'+i,j.slice(i*4000,(i+1)*4000),done)}catch(e){fin()}};
+  try{TG.CloudStorage.getItems(['ah','bh'],(e,hv)=>{if(!e&&hv&&Math.max(hdRev(hv.ah),hdRev(hv.bh))>cloudRev){goRO('cloud');fin();return}go()})}catch(e){go()}} // в облаке уже более новая ревизия с другого устройства — не затираем
 // прочитать одну копию: заголовок → куски → сверка длины и хеша; cb(объект или null)
 function cloudRead(h,key,cb){const [n,len,hs]=String(h||'').split('|').map(Number);if(!n){cb(null);return}const ks=[...Array(n)].map((_,i)=>key(i));
   try{TG.CloudStorage.getItems(ks,(e,v)=>{if(e||!v){cb(undefined);return}const t=ks.map(k=>v[k]||'').join('');if(t.length!==len||hsh(t)!==hs){cb(null);return}
     try{const o=JSON.parse(t);cb(o&&o.pr?o:null)}catch(x){cb(null)}})}catch(e){cb(undefined)}}
 function cloudLoad(){if(!TG||!TG.CloudStorage){cloudReady=true;return}
   const retry=()=>{cloudReady=false;cloudLoad.n=(cloudLoad.n||0)+1;setTimeout(cloudLoad,Math.min(60000,cloudLoad.n*5000))}; // облако не ответило — не пишем, пока не прочитаем
-  const fin=o=>{if(o&&(!hadLocal||o.last>bootLast)){S=upgrade(o);hadLocal=true;render();offline()}cloudReady=true;save()};
-  try{TG.CloudStorage.getItems(['ah','bh','csh'],(e,hv)=>{if(e||!hv){retry();return} // облако не ответило: без своей копии ждём и пробуем снова, не пишем
+  if(cloudLoad.g===undefined)cloudLoad.g=gen; // поколение профиля на момент первого запроса
+  const fin=o=>{if(o&&badSave(o))o=null;const rv=o?o.rev||0:0;cloudRev=Math.max(cloudRev,rv);
+    if(cloudLoad.g!==gen){if(o&&rv>=(S.rev||0))S.rev=rv+1} // профиль уже заменён (импорт/сброс/престиж) — поздний ответ облака не применяем, облако перезапишем
+    else if(o&&(!hadLocal||(o.rev!==undefined&&bootRev!==undefined?o.rev>bootRev:o.last>bootLast))){S=upgrade(o);hadLocal=true;render();offline()}
+    cloudReady=true;save()};
+  try{TG.CloudStorage.getItems(['ah','bh','csh'],(e,hv)=>{if(e||!hv){retry();return}cloudRev=Math.max(cloudRev,hdRev(hv.ah),hdRev(hv.bh)); // берём максимум по обоим заголовкам, а не по выбранной копии
+     // облако не ответило: без своей копии ждём и пробуем снова, не пишем
     const c=[['a',hv.ah],['b',hv.bh]].filter(x=>x[1]).sort((x,y)=>(+String(y[1]).split('|')[3]||0)-(+String(x[1]).split('|')[3]||0));
     const next=k=>{if(k<c.length){cloudRead(c[k][1],i=>c[k][0]+'_'+i,o=>{if(o){cloudSlot=c[k][0]==='a'?1:0;fin(o)}else if(o===undefined)retry();else next(k+1)});return}
       if(hv.csh)cloudRead(hv.csh,i=>'cs_'+i,o=>o===undefined?retry():fin(o));else fin(null)}; // старый формат (до 0.18.8) — одна ячейка cs_
@@ -938,22 +975,29 @@ const A={
   boost:()=>{if(S.boostT>0||S.boostCD>0)return;S.boostT=120;S.boostCD=600;sound('coin');toast('📣 Реклама: все цены ×2 на 2 минуты')},
   eco:()=>{S.eco=S.eco?0:1},
   prest:()=>{const g=prestGain();if(!g)return;modal('Продать бизнес?','Получишь ⭐ '+g+'. Принтеры, деньги и люди обнулятся.',
-    [{t:'Продаю',f:()=>{const d=S.daily,rs=S.rs,rq=S.rq;S=fresh(S.rep+g,S.all,S.best);S.daily=d;S.rs=rs;S.rq=rq;S.intro=true;tab='farm';render();toast('⭐ Репутация теперь '+S.rep)}},{t:'Подумаю',sec:1}])},
+    [{t:'Продаю',f:()=>{const d=S.daily,rs=S.rs,rq=S.rq;const n=fresh(S.rep+g,S.all,S.best);n.daily=d;n.rs=rs;n.rq=rq;n.intro=true;swapS(n);tab='farm';render();toast('⭐ Репутация теперь '+S.rep)}},{t:'Подумаю',sec:1}])},
   exp:()=>{const j=JSON.stringify(S),code='PT1.'+btoa(unescape(encodeURIComponent(j)))+'.'+hsh(j).toString(36);
     try{navigator.clipboard.writeText(code);toast('📋 Код сохранения скопирован — сохрани его в «Избранное» Telegram')}catch(e){}
     modal('📋 Код сохранения','Скопирован в буфер. Если не скопировался — выдели и скопируй вручную:<br><textarea readonly style="width:100%;height:90px;margin-top:8px;background:#0f131b;color:#9fb;border:1px solid #2b3549;border-radius:8px;font-size:10px">'+code+'</textarea>')},
   imp2:()=>modal('📥 Загрузить код','Вставь код сохранения:<textarea id="impc" style="width:100%;height:90px;margin-top:8px;background:#0f131b;color:#fff;border:1px solid #2b3549;border-radius:8px;font-size:11px;-webkit-user-select:text;user-select:text"></textarea>'+
     '<button class="btn" style="width:100%;margin-top:8px" data-a="impgo">Загрузить</button>',[{t:'Отмена',sec:1}]),
-  impgo:()=>{const c=($('impc')||{}).value||'';try{const [t,b,h]=c.trim().split('.'),j=decodeURIComponent(escape(atob(b)));if(t!=='PT1'||hsh(j).toString(36)!==h)throw 0;
-    const o=JSON.parse(j);if(!o.pr)throw 0;S=upgrade(o);S.last=Date.now();$('mod').innerHTML='';save();cloudSave(JSON.stringify(S),1);render();toast('📥 Прогресс загружен')}catch(e){toast('❌ Код не подошёл — проверь, что скопирован целиком')}},
-  reset:()=>modal('Начать с нуля?','Сотрётся всё, включая звёзды.',[{t:'Стереть',f:()=>{const d=S.daily;S=fresh();S.daily=d;S.intro=true;render()}},{t:'Нет',sec:1}]),
+  impgo:()=>{if(ro){toast('⚠️ Игра открыта в другой вкладке — загрузка кода отключена');return}
+    const c=($('impc')||{}).value||'';let old=S,g0=gen,h0=hadLocal,sw=0; // сначала полная проверка во временном объекте, S меняем только после неё
+    try{const [t,b,h]=c.trim().split('.'),j=decodeURIComponent(escape(atob(b)));if(t!=='PT1'||hsh(j).toString(36)!==h)throw 0;
+    const o=JSON.parse(j),er=badSave(o,1);if(er)throw 'Код повреждён ('+er+')';
+    const n=upgrade(o);n.last=Date.now();const bak=JSON.stringify(old);
+    swapS(n);sw=1;render(); // если отрисовка упала — откат ниже
+    try{localStorage.setItem(KEY+'_bak',bak)}catch(x){} // копия прежнего профиля
+    $('mod').innerHTML='';save();cloudSave(JSON.stringify(S),1);toast('📥 Прогресс загружен')}
+    catch(e){if(sw){S=old;gen=g0;hadLocal=h0;try{render()}catch(x){}}toast(typeof e==='string'?'❌ '+e+'. Текущий прогресс не тронут':'❌ Код не подошёл — проверь, что скопирован целиком. Текущий прогресс не тронут')}},
+  reset:()=>modal('Начать с нуля?','Сотрётся всё, включая звёзды.',[{t:'Стереть',f:()=>{const d=S.daily,n=fresh();n.daily=d;n.intro=true;swapS(n);render()}},{t:'Нет',sec:1}]),
 };
 const LIGHT=new Set(['rklist','rkopen','rkclose','rkf','p','clrall','st','spool','mb','offer','boost','skip','bprod','game']);
 document.addEventListener('click',e=>{if(S&&(S.snd||S.mus))audio();const b=e.target.closest('[data-a]');if(!b||b.disabled||b.tagName==='SELECT')return;const a=b.dataset.a;
   const m0=S.money;A[a](b.dataset.i);sound('tap');haptic();if(S.money-m0>.5)pop(e.clientX,e.clientY,'+'+fm(S.money-m0));if(a==='ctask'||a==='offer'||a==='bclaim'||!LIGHT.has(a)||S.pr.length+':'+S.prod!==sig&&a==='mb')render();else upd();save()});
 document.addEventListener('change',e=>{const el=e.target.closest('select[data-a]');if(!el)return;A[el.dataset.a](el.value,el);upd();save()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){save();cloudSave(JSON.stringify(S),1)}}); // свернули — сразу и в облако
-window.addEventListener('pagehide',()=>{save();cloudSave(JSON.stringify(S),1)}); // закрыли вкладку / встроенный браузер
+window.addEventListener('pagehide',()=>{save();cloudSave(JSON.stringify(S),1);try{bc&&bc.postMessage({t:'bye',id:TABID})}catch(e){}}); // закрыли вкладку / встроенный браузер
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){} // просим браузер не чистить хранилище
 // ---------- нижняя карточка стеллажа и список стеллажей (состояние — вне S, в сохранение не идёт) ----------
 let SH=null,SHF=0,SHh='';
